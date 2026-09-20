@@ -54,6 +54,29 @@ dayOff.DateOverrides.Add(new ScheduleDateOverrideConfig
 ScheduleEngine.Normalize(dayOff, 4);
 Check("具体日期停课优先", ActiveAt(dayOff, friday.AddHours(13).AddMinutes(30)) is null);
 
+var dateCellOverride = ScheduleConfig.CreateDefault();
+dateCellOverride.DateOverrides.Add(new ScheduleDateOverrideConfig
+{
+    Date = friday,
+    Label = "临时调课",
+    BaseDayIndex = 4,
+    Cells =
+    [
+        new ScheduleCellConfig
+        {
+            PeriodId = "period-06",
+            Course = "临时数学",
+            Kind = ScheduleCellKind.Class,
+            StartOverride = "13:25",
+            EndOverride = "14:05"
+        }
+    ]
+});
+ScheduleEngine.Normalize(dateCellOverride, 4);
+Check(
+    "具体日期课程覆盖基础模板",
+    ActiveAt(dateCellOverride, friday.AddHours(13).AddMinutes(30))?.Course == "临时数学");
+
 var legacy = new ScheduleConfig
 {
     Rows =

@@ -393,6 +393,28 @@ internal static class ScheduleEngine
             : -1;
     }
 
+    public static ResolvedScheduleEntry ResolveEntry(
+        SchedulePeriodConfig period,
+        ScheduleCellConfig cell)
+    {
+        var overrideStart = default(TimeOnly);
+        var overrideEnd = default(TimeOnly);
+        var usesTimeOverride = !string.IsNullOrWhiteSpace(cell.StartOverride)
+            && !string.IsNullOrWhiteSpace(cell.EndOverride)
+            && TryParseTimeRange(cell.StartOverride, cell.EndOverride, out overrideStart, out overrideEnd);
+        var hasDefaultTime = TryParseTimeRange(period.Start, period.End, out var defaultStart, out var defaultEnd);
+
+        return new ResolvedScheduleEntry(
+            period.Id,
+            period.Label,
+            period.Note,
+            cell.Course,
+            cell.Kind,
+            usesTimeOverride ? overrideStart : hasDefaultTime ? defaultStart : null,
+            usesTimeOverride ? overrideEnd : hasDefaultTime ? defaultEnd : null,
+            usesTimeOverride);
+    }
+
     public static ScheduleCellConfig CloneCell(ScheduleCellConfig source)
     {
         return new ScheduleCellConfig
@@ -424,22 +446,7 @@ internal static class ScheduleEngine
                     Kind = ScheduleCellKind.Empty
                 };
 
-            var overrideStart = default(TimeOnly);
-            var overrideEnd = default(TimeOnly);
-            var usesTimeOverride = !string.IsNullOrWhiteSpace(cell.StartOverride)
-                && !string.IsNullOrWhiteSpace(cell.EndOverride)
-                && TryParseTimeRange(cell.StartOverride, cell.EndOverride, out overrideStart, out overrideEnd);
-            var hasDefaultTime = TryParseTimeRange(period.Start, period.End, out var defaultStart, out var defaultEnd);
-
-            entries.Add(new ResolvedScheduleEntry(
-                period.Id,
-                period.Label,
-                period.Note,
-                cell.Course,
-                cell.Kind,
-                usesTimeOverride ? overrideStart : hasDefaultTime ? defaultStart : null,
-                usesTimeOverride ? overrideEnd : hasDefaultTime ? defaultEnd : null,
-                usesTimeOverride));
+            entries.Add(ResolveEntry(period, cell));
         }
 
         return new ResolvedScheduleDay(date, displayDayIndex, isDayOff, label, entries);

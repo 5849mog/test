@@ -408,7 +408,7 @@ internal sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
         root.Controls.Add(MutedLabel(
-            "可以把某个具体日期设为停课，或让它套用周一至周五中的任意一天。日期规则优先于普通周课表。",
+            "具体日期可设为停课、套用任意工作日，或逐节覆盖课程、空课和时间；日期规则始终优先于普通周课表。",
             900,
             50), 0, 0);
 
@@ -416,6 +416,13 @@ internal sealed class SettingsForm : Form
         _dateOverridesGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "label", HeaderText = "说明", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         _dateOverridesGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "dayOff", HeaderText = "停课", Width = 70 });
         _dateOverridesGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "baseDay", HeaderText = "套用星期", Width = 120 });
+        _dateOverridesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            Name = "overrides",
+            HeaderText = "课程覆盖",
+            Width = 92,
+            ReadOnly = true
+        });
         root.Controls.Add(_dateOverridesGrid, 0, 1);
 
         var bar = new FlowLayoutPanel
@@ -426,9 +433,12 @@ internal sealed class SettingsForm : Form
         };
         var add = MakeButton("添加特殊日期", false);
         add.Click += (_, _) => AddDateOverride();
+        var editCourses = MakeButton("编辑当天课程", false);
+        editCourses.Click += (_, _) => EditDateOverrideSchedule();
         var remove = MakeButton("删除选中", false);
         remove.Click += (_, _) => RemoveDateOverride();
         bar.Controls.Add(add);
+        bar.Controls.Add(editCourses);
         bar.Controls.Add(remove);
         root.Controls.Add(bar, 0, 2);
 
@@ -683,7 +693,8 @@ internal sealed class SettingsForm : Form
                 item.Date.ToString("yyyy-MM-dd"),
                 item.Label,
                 item.IsDayOff,
-                baseDay);
+                baseDay,
+                item.Cells.Count + " 项");
             _dateOverridesGrid.Rows[rowIndex].Tag = item.Cells
                 .Select(ScheduleEngine.CloneCell)
                 .ToList();
@@ -734,7 +745,7 @@ internal sealed class SettingsForm : Form
             }
 
             var dateText = Convert.ToString(row.Cells["date"].Value)?.Trim();
-            if (!DateTime.TryParse(dateText, out var date))
+            if (!TryParseExactDate(dateText, out var date))
             {
                 throw new InvalidOperationException("事件“" + title + "”的日期无效，请使用 yyyy-MM-dd 格式。");
             }
@@ -1119,13 +1130,11 @@ internal sealed class SettingsForm : Form
                     cell.StartOverride = null;
                     cell.EndOverride = null;
                 }
-                else if (period.Kind == ScheduleCellKind.Break)
+                else
                 {
-                    cell.Kind = ScheduleCellKind.Break;
-                }
-                else if (cell.Kind == ScheduleCellKind.Empty)
-                {
-                    cell.Kind = ScheduleCellKind.Class;
+                    cell.Kind = period.Kind == ScheduleCellKind.Break
+                        ? ScheduleCellKind.Break
+                        : ScheduleCellKind.Class;
                 }
 
                 days[dayIndex].Cells.Add(cell);
@@ -1154,27 +1163,12 @@ internal sealed class SettingsForm : Form
                 continue;
             }
 
-            if (!DateTime.TryParse(dateText, out var date))
+            if (!TryParseExactDate(dateText, out var date))
             {
                 throw new InvalidOperationException("特殊日期“" + dateText + "”无效，请使用 yyyy-MM-dd 格式。");
             }
 
-            var baseDayText = Convert.ToString(row.Cells["baseDay"].Value)?.Trim();
-            int? baseDayIndex = null;
-            if (!string.IsNullOrWhiteSpace(baseDayText) && baseDayText != "当天")
-            {
-                var names = _weekdayInputs.Select(input => input.Text.Trim()).ToList();
-                var matchedIndex = names.FindIndex(name =>
-                    name.Equals(baseDayText, StringComparison.OrdinalIgnoreCase));
-                if (matchedIndex < 0)
-                {
-                    throw new InvalidOperationException(
-                        "特殊日期“" + date.ToString("yyyy-MM-dd")
-                        + "”的套用星期无效，请填写“当天”或当前工作日名称。");
-                }
-
-                baseDayIndex = matchedIndex;
-            }
+            var baseDayIndex = ReadBaseDayIndex(row, date);
 
             overrides.Add(new ScheduleDateOverrideConfig
             {
@@ -1191,10 +1185,104 @@ internal sealed class SettingsForm : Form
         _draft.Schedule.DateOverrides = overrides;
     }
 
+    private void EditDateOverrideSchedule()
+    {
+        var row = _dateOverridesGrid.CurrentRow;
+        if (row is null || row.IsNewRow)
+        {
+            _statusLabel.Text = "请先选择一条特殊日期规则。";
+            return;
+        }
+
+        try
+        {
+            var dateText = Convert.ToString(row.Cells["date"].Value)?.Trim();
+            if (!TryParseExactDate(dateText, out var date))
+            {
+                throw new InvalidOperationException("特殊日期“" + dateText + "”无效，请使用 yyyy-MM-dd 格式。");
+            }
+
+            if (Convert.ToBoolean(row.Cells["dayOff"].Value ?? false))
+            {
+                MessageBox.Show(
+                    this,
+                    "该日期已设为停课。若要编辑当天课程，请先取消“停课”。",
+                    "当天无需课程覆盖",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            var weekdayNames = _weekdayInputs.Select(input => input.Text.Trim()).ToList();
+            if (weekdayNames.Any(string.IsNullOrWhiteSpace))
+            {
+                throw new InvalidOperationException("工作日名称不能为空。");
+            }
+
+            _draft.Schedule.Weekdays = weekdayNames;
+            ReadScheduleIntoDraft();
+            var baseDayIndex = ReadBaseDayIndex(row, date);
+            var sourceCells = row.Tag is List<ScheduleCellConfig> cells
+                ? cells.Select(ScheduleEngine.CloneCell).ToList()
+                : [];
+
+            using var dialog = new ScheduleDateOverrideEditorForm(
+                _draft.Schedule,
+                date.Date,
+                baseDayIndex,
+                sourceCells);
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            row.Tag = dialog.EditedCells
+                .Select(ScheduleEngine.CloneCell)
+                .ToList();
+            row.Cells["overrides"].Value = dialog.EditedCells.Count + " 项";
+            _statusLabel.Text = date.ToString("yyyy-MM-dd") + " 的课程覆盖已更新。";
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "无法编辑当天课程", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private int? ReadBaseDayIndex(DataGridViewRow row, DateTime date)
+    {
+        var baseDayText = Convert.ToString(row.Cells["baseDay"].Value)?.Trim();
+        if (string.IsNullOrWhiteSpace(baseDayText) || baseDayText == "当天")
+        {
+            return null;
+        }
+
+        var names = _weekdayInputs.Select(input => input.Text.Trim()).ToList();
+        var matchedIndex = names.FindIndex(name =>
+            name.Equals(baseDayText, StringComparison.OrdinalIgnoreCase));
+        if (matchedIndex < 0)
+        {
+            throw new InvalidOperationException(
+                "特殊日期“" + date.ToString("yyyy-MM-dd")
+                + "”的套用星期无效，请填写“当天”或当前工作日名称。");
+        }
+
+        return matchedIndex;
+    }
+
     private void AddDateOverride()
     {
+        var usedDates = new HashSet<DateTime>();
+        foreach (DataGridViewRow row in _dateOverridesGrid.Rows)
+        {
+            if (!row.IsNewRow
+                && TryParseExactDate(Convert.ToString(row.Cells["date"].Value), out var existingDate))
+            {
+                usedDates.Add(existingDate.Date);
+            }
+        }
+
         var date = DateTime.Today.AddDays(1);
-        while (_draft.Schedule.DateOverrides.Any(item => item.Date.Date == date.Date))
+        while (usedDates.Contains(date.Date))
         {
             date = date.AddDays(1);
         }
@@ -1203,7 +1291,8 @@ internal sealed class SettingsForm : Form
             date.ToString("yyyy-MM-dd"),
             "临时安排",
             false,
-            "当天");
+            "当天",
+            "0 项");
         _dateOverridesGrid.Rows[rowIndex].Tag = new List<ScheduleCellConfig>();
     }
 
@@ -1417,6 +1506,16 @@ internal sealed class SettingsForm : Form
             .Select(item => item.Trim())
             .Where(item => item.Length > 0)
             .ToList();
+    }
+
+    private static bool TryParseExactDate(string? value, out DateTime date)
+    {
+        return DateTime.TryParseExact(
+            value?.Trim(),
+            "yyyy-MM-dd",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None,
+            out date);
     }
 
     private static string ReadColor(TextBox box, string name)
