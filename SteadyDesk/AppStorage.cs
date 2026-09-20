@@ -12,9 +12,7 @@ internal static class AppStorage
 {
     private const string EmbeddedBackgroundName = "SteadyDesk.Assets.wallpaper-background-v1.png";
 
-    public static string RootDirectory { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "稳序桌面");
+    public static string RootDirectory { get; } = ResolveRootDirectory();
 
     public static string ConfigPath => Path.Combine(RootDirectory, "config.json");
     public static string DefaultBackgroundPath => Path.Combine(RootDirectory, "默认背景.png");
@@ -22,6 +20,16 @@ internal static class AppStorage
     public static string PreviewWallpaperPath => Path.Combine(RootDirectory, "预览壁纸.jpg");
     public static string OriginalWallpaperPath => Path.Combine(RootDirectory, "原壁纸.png");
     public static string CustomBackgroundPath => Path.Combine(RootDirectory, "自定义背景.png");
+
+    private static string ResolveRootDirectory()
+    {
+        var overrideDirectory = Environment.GetEnvironmentVariable("STEADY_DESK_DATA_DIR");
+        return string.IsNullOrWhiteSpace(overrideDirectory)
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "稳序桌面")
+            : Path.GetFullPath(overrideDirectory);
+    }
 
     public static void EnsureInitialized()
     {

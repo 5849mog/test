@@ -45,7 +45,7 @@ jobs:
           $preview = Join-Path $env:RUNNER_TEMP "steady-desk-published-smoke.jpg"
           $exe = Join-Path $PWD "dist/稳序桌面.exe"
           New-Item -ItemType Directory -Force -Path $profileRoot | Out-Null
-          $env:LOCALAPPDATA = $profileRoot
+          $env:STEADY_DESK_DATA_DIR = $profileRoot
 
           function Invoke-Preview([int] $Width, [int] $Height) {
             $arguments = @("--render-preview", $preview, $Width.ToString(), $Height.ToString())
@@ -63,13 +63,17 @@ jobs:
 
           Invoke-Preview 1280 720
 
-          $configPath = Join-Path $profileRoot "稳序桌面/config.json"
+          $configPath = Join-Path $profileRoot "config.json"
           if (-not (Test-Path $configPath)) {
             throw "First-run configuration was not created."
           }
           $savedConfig = Get-Content -Raw -Path $configPath | ConvertFrom-Json
           if ($savedConfig.SchemaVersion -ne 4) {
             throw "First-run configuration schema is not v4."
+          }
+          $defaultBackground = Join-Path $profileRoot "默认背景.png"
+          if (-not (Test-Path $defaultBackground)) {
+            throw "Embedded default background was not extracted."
           }
 
           Invoke-Preview 1920 1080
