@@ -94,6 +94,13 @@ internal static class WallpaperRenderer
             graphics.DrawPath(cardPen, cardPath);
         }
 
+        var innerCard = RectangleF.Inflate(card, -10f * scale, -10f * scale);
+        using (var innerCardPath = RoundedRectangle(innerCard, Math.Max(2f, radius - 3f * scale)))
+        using (var innerCardPen = new Pen(Color.FromArgb(34, ParseColor(theme.Gold, Color.Goldenrod)), Math.Max(.6f, .7f * scale)))
+        {
+            graphics.DrawPath(innerCardPen, innerCardPath);
+        }
+
         var padding = 28f * scale;
         var content = RectangleF.Inflate(card, -padding, -padding);
         var headerHeight = 105f * scale;
@@ -112,6 +119,11 @@ internal static class WallpaperRenderer
         graphics.DrawString(config.Content.ScheduleTitle, titleFont, titleBrush,
             new RectangleF(content.X, content.Y + 24f * scale, content.Width, 55f * scale), centered);
 
+        using var headerRulePen = new Pen(Color.FromArgb(66, ParseColor(theme.Gold, Color.Goldenrod)), Math.Max(.7f, scale));
+        var headerRuleLeft = content.X + content.Width * .18f;
+        var headerRuleRight = content.Right - content.Width * .18f;
+        graphics.DrawLine(headerRulePen, headerRuleLeft, content.Y + 88f * scale, headerRuleRight, content.Y + 88f * scale);
+
         DrawScheduleTable(graphics, config, table, scale, today, now);
     }
 
@@ -129,17 +141,17 @@ internal static class WallpaperRenderer
         var firstColumnWidth = table.Width * .20f;
         var dayColumnWidth = (table.Width - firstColumnWidth) / 5f;
         var rowHeight = table.Height / Math.Max(1, rows.Count + 1);
-        var lineWidth = Math.Max(1f, scale * .7f);
+        var lineWidth = Math.Max(.8f, scale * .65f);
         var activeDay = GetWeekdayIndex(today);
         var activeRow = GetActiveRowIndex(schedule, now);
 
-        using var gridPen = new Pen(Color.FromArgb(46, ParseColor(theme.InkSoft, Color.Gray)), lineWidth);
-        using var borderPen = new Pen(Color.FromArgb(66, ParseColor(theme.Wine, Color.DarkRed)), lineWidth);
-        using var headerBrush = new SolidBrush(Color.FromArgb(22, ParseColor(theme.Wine, Color.DarkRed)));
-        using var leftBrush = new SolidBrush(Color.FromArgb(17, ParseColor(theme.Gold, Color.Goldenrod)));
-        using var alternateBrush = new SolidBrush(Color.FromArgb(22, ParseColor(theme.Gold, Color.Goldenrod)));
-        using var fridayBrush = new SolidBrush(Color.FromArgb(17, ParseColor(theme.Wine, Color.DarkRed)));
-        using var breakBrush = new SolidBrush(Color.FromArgb(24, ParseColor(theme.WineDeep, Color.DarkRed)));
+        using var gridPen = new Pen(Color.FromArgb(34, ParseColor(theme.InkSoft, Color.Gray)), lineWidth);
+        using var borderPen = new Pen(Color.FromArgb(58, ParseColor(theme.Wine, Color.DarkRed)), lineWidth);
+        using var headerBrush = new SolidBrush(Color.FromArgb(18, ParseColor(theme.Wine, Color.DarkRed)));
+        using var leftBrush = new SolidBrush(Color.FromArgb(14, ParseColor(theme.Gold, Color.Goldenrod)));
+        using var alternateBrush = new SolidBrush(Color.FromArgb(16, ParseColor(theme.Gold, Color.Goldenrod)));
+        using var fridayBrush = new SolidBrush(Color.FromArgb(14, ParseColor(theme.Wine, Color.DarkRed)));
+        using var breakBrush = new SolidBrush(Color.FromArgb(20, ParseColor(theme.WineDeep, Color.DarkRed)));
         using var headerFont = MakeFont("Microsoft YaHei", 17.5f * scale, FontStyle.Bold);
         using var firstHeaderFont = MakeFont("Microsoft YaHei", 15.5f * scale, FontStyle.Bold);
         using var courseFont = MakeFont("Microsoft YaHei", 17.5f * scale, FontStyle.Regular);
@@ -149,10 +161,10 @@ internal static class WallpaperRenderer
         using var headerTextBrush = new SolidBrush(ParseColor(theme.Wine, Color.DarkRed));
         using var activeHeaderFill = new SolidBrush(ParseColor(theme.Wine, Color.DarkRed));
         using var activeHeaderBrush = new SolidBrush(Color.FromArgb(255, ParseColor(theme.Paper, Color.White)));
-        using var activeColumnBrush = new SolidBrush(Color.FromArgb(11, ParseColor(theme.Champagne, Color.Goldenrod)));
-        using var activeCellBrush = new SolidBrush(Color.FromArgb(48, ParseColor(theme.Champagne, Color.Goldenrod)));
-        using var activeCellPen = new Pen(Color.FromArgb(230, ParseColor(theme.Gold, Color.Goldenrod)), Math.Max(2f, 2.3f * scale));
-        using var activeCellCornerPen = new Pen(Color.FromArgb(145, ParseColor(theme.Wine, Color.DarkRed)), Math.Max(1f, 1.2f * scale));
+        using var activeColumnBrush = new SolidBrush(Color.FromArgb(9, ParseColor(theme.Champagne, Color.Goldenrod)));
+        using var activeCellBrush = new SolidBrush(Color.FromArgb(36, ParseColor(theme.Champagne, Color.Goldenrod)));
+        using var activeCellPen = new Pen(Color.FromArgb(195, ParseColor(theme.Gold, Color.Goldenrod)), Math.Max(2f, 2.3f * scale));
+        using var activeCellCornerPen = new Pen(Color.FromArgb(120, ParseColor(theme.Wine, Color.DarkRed)), Math.Max(1f, 1.2f * scale));
         using var courseBrush = new SolidBrush(ParseColor(theme.Ink, Color.Black));
         using var timeBrush = new SolidBrush(ParseColor(theme.Wine, Color.DarkRed));
         using var emptyBrush = new SolidBrush(Color.FromArgb(120, ParseColor(theme.InkSoft, Color.Gray)));
@@ -308,10 +320,21 @@ internal static class WallpaperRenderer
             height * .91f);
 
         using var panelPath = RoundedRectangle(panel, 8f * scale);
-        using var panelBrush = new SolidBrush(Color.FromArgb(226, ParseColor(theme.WineDeep, Color.DarkRed)));
-        using var panelPen = new Pen(Color.FromArgb(120, ParseColor(theme.Champagne, Color.Goldenrod)), Math.Max(1f, scale));
+        using var panelBrush = new LinearGradientBrush(
+            panel,
+            Color.FromArgb(234, ParseColor(theme.WineDeep, Color.DarkRed)),
+            Color.FromArgb(222, ParseColor(theme.Wine, Color.DarkRed)),
+            LinearGradientMode.Vertical);
+        using var panelPen = new Pen(Color.FromArgb(92, ParseColor(theme.Champagne, Color.Goldenrod)), Math.Max(1f, scale));
         graphics.FillPath(panelBrush, panelPath);
         graphics.DrawPath(panelPen, panelPath);
+
+        var innerPanel = RectangleF.Inflate(panel, -10f * scale, -10f * scale);
+        using (var innerPanelPath = RoundedRectangle(innerPanel, 5f * scale))
+        using (var innerPanelPen = new Pen(Color.FromArgb(24, ParseColor(theme.Champagne, Color.Goldenrod)), Math.Max(.6f, .7f * scale)))
+        {
+            graphics.DrawPath(innerPanelPen, innerPanelPath);
+        }
 
         var inner = RectangleF.Inflate(panel, -34f * scale, -34f * scale);
         using var eyebrowFont = MakeFont("Georgia", 13f * scale, FontStyle.Regular);
@@ -335,7 +358,7 @@ internal static class WallpaperRenderer
                 new RectangleF(inner.X, inner.Y + 4f * scale, 90f * scale, 30f * scale), near);
         }
 
-        using var linePen = new Pen(Color.FromArgb(72, ParseColor(theme.Paper, Color.White)), Math.Max(1f, scale));
+        using var linePen = new Pen(Color.FromArgb(58, ParseColor(theme.Paper, Color.White)), Math.Max(1f, scale));
         graphics.DrawLine(linePen, inner.X + inner.Width * .28f, inner.Y + 72f * scale,
             inner.Right - inner.Width * .28f, inner.Y + 72f * scale);
 
@@ -390,9 +413,13 @@ internal static class WallpaperRenderer
     {
         var theme = config.Theme;
         using var cardPath = RoundedRectangle(bounds, 5f * scale);
-        using var cardBrush = new SolidBrush(Color.FromArgb(22, ParseColor(theme.Paper, Color.White)));
-        using var cardPen = new Pen(Color.FromArgb(52, ParseColor(theme.Paper, Color.White)), Math.Max(1f, scale));
-        using var accentPen = new Pen(ParseColor(item.Color, ParseColor(theme.Champagne, Color.Goldenrod)), Math.Max(2f, 2f * scale));
+        using var cardBrush = new SolidBrush(Color.FromArgb(18, ParseColor(theme.Paper, Color.White)));
+        using var cardPen = new Pen(Color.FromArgb(44, ParseColor(theme.Paper, Color.White)), Math.Max(1f, scale));
+        using var accentPen = new Pen(ParseColor(item.Color, ParseColor(theme.Champagne, Color.Goldenrod)), Math.Max(1.5f, 1.8f * scale))
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round
+        };
         using var center = CenterFormat();
         using var labelFont = MakeFont("Microsoft YaHei", 18f * scale, FontStyle.Regular);
         using var numberFont = MakeFont("Georgia", Math.Max(24f, 78f * scale), FontStyle.Regular);
@@ -400,7 +427,7 @@ internal static class WallpaperRenderer
         using var dateFont = MakeFont("Georgia", 13f * scale, FontStyle.Regular);
         using var labelBrush = new SolidBrush(Color.FromArgb(238, ParseColor(theme.Champagne, Color.Goldenrod)));
         using var mainBrush = new SolidBrush(Color.FromArgb(248, ParseColor(theme.Paper, Color.White)));
-        using var mutedBrush = new SolidBrush(Color.FromArgb(172, ParseColor(theme.Paper, Color.White)));
+        using var mutedBrush = new SolidBrush(Color.FromArgb(150, ParseColor(theme.Paper, Color.White)));
 
         graphics.FillPath(cardBrush, cardPath);
         graphics.DrawPath(cardPen, cardPath);
@@ -454,12 +481,12 @@ internal static class WallpaperRenderer
         var right = bounds.Right - 20f * scale;
         var lineY = bounds.Bottom - 15f * scale;
 
-        using var trackPen = new Pen(Color.FromArgb(60, ParseColor(theme.Paper, Color.White)), Math.Max(2f, 3f * scale))
+        using var trackPen = new Pen(Color.FromArgb(48, ParseColor(theme.Paper, Color.White)), Math.Max(2f, 3f * scale))
         {
             StartCap = LineCap.Round,
             EndCap = LineCap.Round
         };
-        using var progressPen = new Pen(Color.FromArgb(220, ParseColor(theme.Champagne, Color.Goldenrod)), Math.Max(2f, 3f * scale))
+        using var progressPen = new Pen(Color.FromArgb(190, ParseColor(theme.Champagne, Color.Goldenrod)), Math.Max(2f, 3f * scale))
         {
             StartCap = LineCap.Round,
             EndCap = LineCap.Round
