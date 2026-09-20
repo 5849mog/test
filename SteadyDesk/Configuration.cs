@@ -301,7 +301,9 @@ internal static class ConfigStore
         }
 
         var sourceSchemaVersion = config.SchemaVersion;
-        if (sourceSchemaVersion < 4 && File.Exists(AppStorage.ConfigPath))
+        var requiresMigration = sourceSchemaVersion < 4
+            || config.Schedule?.Rows is not null;
+        if (requiresMigration && File.Exists(AppStorage.ConfigPath))
         {
             LastMigrationBackupPath = BackupBeforeMigration(sourceSchemaVersion);
             if (LastMigrationBackupPath is null)

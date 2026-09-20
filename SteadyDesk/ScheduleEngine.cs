@@ -94,8 +94,8 @@ internal static class ScheduleEngine
             period.Label = string.IsNullOrWhiteSpace(period.Label)
                 ? "第 " + (index + 1) + " 项"
                 : period.Label.Trim();
-            period.Start = period.Start?.Trim() ?? string.Empty;
-            period.End = period.End?.Trim() ?? string.Empty;
+            period.Start = NormalizeTimeText(period.Start);
+            period.End = NormalizeTimeText(period.End);
             period.Note = string.IsNullOrWhiteSpace(period.Note) ? null : period.Note.Trim();
             if (!Enum.IsDefined(period.Kind))
             {
@@ -367,12 +367,27 @@ internal static class ScheduleEngine
 
     public static bool TryParseTime(string? value, out TimeOnly time)
     {
-        return TimeOnly.TryParseExact(
-            value?.Trim(),
+        var normalized = value?.Trim();
+        if (TimeOnly.TryParseExact(
+            normalized,
             TimeFormats,
             CultureInfo.InvariantCulture,
             DateTimeStyles.None,
-            out time);
+            out time))
+        {
+            return true;
+        }
+
+        if (TimeSpan.TryParse(normalized, CultureInfo.InvariantCulture, out var legacyTime)
+            && legacyTime >= TimeSpan.Zero
+            && legacyTime < TimeSpan.FromDays(1))
+        {
+            time = TimeOnly.FromTimeSpan(legacyTime);
+            return true;
+        }
+
+        time = default;
+        return false;
     }
 
     public static bool TryParseTimeRange(
@@ -631,12 +646,8 @@ internal static class ScheduleEngine
         cell.Course = (cell.Course ?? string.Empty)
             .Replace("\r\n", "\n")
             .Trim();
-        cell.StartOverride = string.IsNullOrWhiteSpace(cell.StartOverride)
-            ? null
-            : cell.StartOverride.Trim();
-        cell.EndOverride = string.IsNullOrWhiteSpace(cell.EndOverride)
-            ? null
-            : cell.EndOverride.Trim();
+        cell.StartOverride = NormalizeOptionalTimeText(cell.StartOverride);
+        cell.EndOverride = NormalizeOptionalTimeText(cell.EndOverride);
 
         if (!Enum.IsDefined(cell.Kind))
         {
@@ -650,6 +661,21 @@ internal static class ScheduleEngine
             cell.StartOverride = null;
             cell.EndOverride = null;
         }
+    }
+
+    private static string NormalizeTimeText(string? value)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+        return TryParseTime(normalized, out var time)
+            ? time.ToString("HH:mm", CultureInfo.InvariantCulture)
+            : normalized;
+    }
+
+    private static string? NormalizeOptionalTimeText(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? null
+            : NormalizeTimeText(value);
     }
 
     private static bool IsEmptyCourse(string? value)

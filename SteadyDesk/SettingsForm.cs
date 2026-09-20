@@ -1189,13 +1189,11 @@ internal sealed class SettingsForm : Form
                     cell.StartOverride = null;
                     cell.EndOverride = null;
                 }
-                else if (period.Kind == ScheduleCellKind.Break)
-                {
-                    cell.Kind = ScheduleCellKind.Break;
-                }
                 else if (cell.Kind == ScheduleCellKind.Empty)
                 {
-                    cell.Kind = ScheduleCellKind.Class;
+                    cell.Kind = period.Kind == ScheduleCellKind.Break
+                        ? ScheduleCellKind.Break
+                        : ScheduleCellKind.Class;
                 }
 
                 days[dayIndex].Cells.Add(cell);

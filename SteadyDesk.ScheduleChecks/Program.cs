@@ -104,16 +104,20 @@ var legacy = new ScheduleConfig
         new ScheduleRowConfig
         {
             Label = "第六节课",
-            Time = "12:40–13:20",
-            Start = "12:40",
-            End = "13:20",
-            Courses = ["—", "—", "—", "—", "13:20–14:00\n体育"]
+            Time = "12:40:00–13:20:00",
+            Start = "12:40:00",
+            End = "13:20:00",
+            Courses = ["—", "—", "—", "—", "13:20:00–14:00:00\n体育"]
         }
     ]
 };
 ScheduleEngine.Normalize(legacy, 3);
+var migratedPeriod = legacy.Periods.Single();
 var migratedFriday = ScheduleEngine.ResolveTemplateDay(legacy, 4).GetEntry("period-01");
 var migratedMonday = ScheduleEngine.ResolveTemplateDay(legacy, 0).GetEntry("period-01");
+Check(
+    "v3 带秒默认时间归一化",
+    migratedPeriod.Start == "12:40" && migratedPeriod.End == "13:20");
 Check("v3 星期五时间被迁移", migratedFriday?.UsesTimeOverride == true
     && migratedFriday.Start == new TimeOnly(13, 20)
     && migratedFriday.Course == "体育");
