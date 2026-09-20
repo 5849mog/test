@@ -995,11 +995,9 @@ internal sealed class SettingsForm : Form
             : Path.GetFileName(path);
     }
 
-    private static TabPage CreatePage    private static string GetBackgroundName(string path)
+    private static TabPage CreatePage(string text)
     {
-        return IsDefaultBackground(path)
-            ? "内置默认底图"
-            : Path.GetFileName(path);
+        return new TabPage(text) { BackColor = Paper, Padding = new Padding(10) };
     }
 
     protected override void Dispose(bool disposing)
