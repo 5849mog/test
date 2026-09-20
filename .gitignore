@@ -2,13 +2,13 @@
 **/bin/
 **/obj/
 
-# Unrelated workspace project
-/manim-vieta/
-
-# Keep the distributable executable, ignore any other packaging leftovers
+# Generated distributables and previews
 /dist/*
-!/dist/郑老师中考倒计时.exe
-
-# Keep only the latest visual handoff preview
+!/dist/稳序桌面.exe
 /output/*
 !/output/最终版-右侧字体放大.jpg
+
+# Local build and temporary files
+*.user
+*.suo
+*.tmp
