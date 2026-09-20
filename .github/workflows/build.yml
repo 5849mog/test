@@ -1,0 +1,39 @@
+name: Build SteadyDesk
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish single-file executable
+        run: >
+          dotnet publish SteadyDesk/SteadyDesk.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          /p:PublishSingleFile=true
+          /p:IncludeNativeLibrariesForSelfExtract=true
+          -o dist
+
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: steady-desk-win-x64
+          path: dist/稳序桌面.exe
