@@ -7,6 +7,7 @@ internal static class AutoStartManager
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "SteadyDesk";
+    private const string LegacyValueName = "ZhengTeacherCountdownWallpaper";
 
     public static bool IsEnabled
     {
@@ -33,6 +34,12 @@ internal static class AutoStartManager
             key.DeleteValue(ValueName, false);
         }
     }
+
+    public static void RemoveLegacyEntries()
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath, true);
+        key?.DeleteValue(LegacyValueName, false);
+    }
 }
 
 internal static class WallpaperManager
@@ -48,7 +55,10 @@ internal static class WallpaperManager
         string value,
         int flags);
 
-    public static void Apply(string imagePath)
+    public static void Apply(
+        string imagePath,
+        string? wallpaperStyle = null,
+        string? tileWallpaper = null)
     {
         if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
         {
@@ -57,8 +67,8 @@ internal static class WallpaperManager
 
         using (var desktopKey = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop", true))
         {
-            desktopKey?.SetValue("WallpaperStyle", "10");
-            desktopKey?.SetValue("TileWallpaper", "0");
+            desktopKey?.SetValue("WallpaperStyle", wallpaperStyle ?? "10");
+            desktopKey?.SetValue("TileWallpaper", tileWallpaper ?? "0");
         }
 
         if (!SystemParametersInfo(
