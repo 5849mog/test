@@ -159,14 +159,14 @@ internal sealed class ScheduleConfig
                 new() { Label = "大课间", Time = "09:35–10:05", Start = "09:35", End = "10:05", IsBreak = true, Courses = ["做操 / 运动 / 学习"] },
                 new() { Label = "第三节课", Time = "10:05–10:45", Start = "10:05", End = "10:45", Courses = ["道法", "数学", "化学", "英语", "物理"] },
                 new() { Label = "第四节课", Time = "11:00–11:40", Start = "11:00", End = "11:40", Courses = ["英语", "体育", "体育", "英语", "物理"] },
-                new() { Label = "第五节课", Time = "11:55–12:35", Start = "11:55", End = "12:35", Courses = ["英语", "数学", "英语", "美术（单）\\n音乐（双）", "生物（单）\\n地理（双）"] },
-                new() { Label = "第六节课", Time = "12:40–13:20", Start = "12:40", End = "13:20", Courses = ["—", "—", "—", "—", "13:20–14:00\\n体育"] },
-                new() { Label = "第七节课", Time = "13:35–14:15", Start = "13:35", End = "14:15", Courses = ["物理", "语文", "语文", "体育", "14:15–14:55\\n历史"] },
-                new() { Label = "第八节课", Time = "14:30–15:10", Start = "14:30", End = "15:10", Courses = ["历史", "化学", "语文", "物理", "15:10–15:50\\n数学"] },
-                new() { Label = "第九节课", Time = "15:25–16:05", Start = "15:25", End = "16:05", Courses = ["数学", "化学", "历史", "数学", "16:00–16:40\\n英语"] },
-                new() { Label = "第十节课", Time = "16:15–16:55", Start = "16:15", End = "16:55", Courses = ["数学", "物理", "道法", "数学", "16:50–17:30\\n班会"] },
-                new() { Label = "第十一节课", Time = "17:10–18:10\\n晚托走班", Start = "17:10", End = "18:10", Courses = ["物理（单）\\n数学（双）", "体活", "化学（单）\\n语文（双）", "历史/道法（单）\\n英语（双）", "—"] },
-                new() { Label = "延时服务", Time = "18:40–20:30", Start = "18:40", End = "20:30", Courses = ["语文", "18:30–20:30\\n物理（单）\\n化学（双）", "数学", "英语", "—"] }
+                new() { Label = "第五节课", Time = "11:55–12:35", Start = "11:55", End = "12:35", Courses = ["英语", "数学", "英语", "美术（单）\n音乐（双）", "生物（单）\n地理（双）"] },
+                new() { Label = "第六节课", Time = "12:40–13:20", Start = "12:40", End = "13:20", Courses = ["—", "—", "—", "—", "13:20–14:00\n体育"] },
+                new() { Label = "第七节课", Time = "13:35–14:15", Start = "13:35", End = "14:15", Courses = ["物理", "语文", "语文", "体育", "14:15–14:55\n历史"] },
+                new() { Label = "第八节课", Time = "14:30–15:10", Start = "14:30", End = "15:10", Courses = ["历史", "化学", "语文", "物理", "15:10–15:50\n数学"] },
+                new() { Label = "第九节课", Time = "15:25–16:05", Start = "15:25", End = "16:05", Courses = ["数学", "化学", "历史", "数学", "16:00–16:40\n英语"] },
+                new() { Label = "第十节课", Time = "16:15–16:55", Start = "16:15", End = "16:55", Courses = ["数学", "物理", "道法", "数学", "16:50–17:30\n班会"] },
+                new() { Label = "第十一节课", Time = "17:10–18:10\n晚托走班", Start = "17:10", End = "18:10", Courses = ["物理（单）\n数学（双）", "体活", "化学（单）\n语文（双）", "历史/道法（单）\n英语（双）", "—"] },
+                new() { Label = "延时服务", Time = "18:40–20:30", Start = "18:40", End = "20:30", Courses = ["语文", "18:30–20:30\n物理（单）\n化学（双）", "数学", "英语", "—"] }
             ]
         };
     }
@@ -222,16 +222,16 @@ internal sealed class ContentConfig
     public DateTime PreparationStartDate { get; set; } = new(2026, 9, 1);
     public List<string> Quotes { get; set; } =
     [
-        "每一个清晨的坚持，都在为 6 月的答案加分。\\n今天，也要稳稳地走一步。",
-        "不急着和昨天比较。\\n今天多做一点，六月就多一分底气。",
-        "把会做的题做稳，\\n把不会的题一点点变成会。",
-        "每一次按时出发，\\n都在靠近想去的六月。",
-        "成绩会记录努力，\\n时间会回答坚持。",
-        "先完成今天的目标，\\n再把目光放远一点。",
-        "不慌，不乱，不停步。\\n稳住节奏，稳住自己。",
-        "现在的每一页，\\n都会成为考场上的底牌。",
-        "把基础打牢，把心态放稳，\\n答案自然会越来越清楚。",
-        "早起一点，专注一点，\\n今天也会有新的收获。"
+        "每一个清晨的坚持，都在为 6 月的答案加分。\n今天，也要稳稳地走一步。",
+        "不急着和昨天比较。\n今天多做一点，六月就多一分底气。",
+        "把会做的题做稳，\n把不会的题一点点变成会。",
+        "每一次按时出发，\n都在靠近想去的六月。",
+        "成绩会记录努力，\n时间会回答坚持。",
+        "先完成今天的目标，\n再把目光放远一点。",
+        "不慌，不乱，不停步。\n稳住节奏，稳住自己。",
+        "现在的每一页，\n都会成为考场上的底牌。",
+        "把基础打牢，把心态放稳，\n答案自然会越来越清楚。",
+        "早起一点，专注一点，\n今天也会有新的收获。"
     ];
 
     public static ContentConfig CreateDefault() => new();
@@ -270,17 +270,17 @@ internal static class ConfigStore
         }
         else
         {
+            var json = File.ReadAllText(AppStorage.ConfigPath);
             try
             {
-                config = JsonSerializer.Deserialize<AppConfig>(
-                    File.ReadAllText(AppStorage.ConfigPath), Options);
+                config = JsonSerializer.Deserialize<AppConfig>(json, Options);
 
                 if (config is null)
                 {
                     throw new JsonException("配置文件为空。");
                 }
             }
-            catch
+            catch (JsonException)
             {
                 LastRecoveryPath = BackupCorruptConfig();
                 config = LoadLegacyOrDefault();
