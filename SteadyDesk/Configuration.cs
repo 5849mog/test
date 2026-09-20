@@ -4,7 +4,7 @@ namespace SteadyDesk;
 
 internal sealed class AppConfig
 {
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
     public WallpaperConfig Wallpaper { get; set; } = WallpaperConfig.CreateDefault();
     public ScheduleConfig Schedule { get; set; } = ScheduleConfig.CreateDefault();
     public List<CountdownEventConfig> Events { get; set; } = CountdownEventConfig.CreateDefault();
@@ -33,6 +33,7 @@ internal sealed class AppConfig
         Wallpaper.BackgroundPath = string.IsNullOrWhiteSpace(Wallpaper.BackgroundPath)
             ? AppStorage.DefaultBackgroundPath
             : Wallpaper.BackgroundPath;
+
         Wallpaper.ScheduleXPercent = Math.Clamp(Wallpaper.ScheduleXPercent, 3f, 25f);
         Wallpaper.CountdownXPercent = Math.Clamp(Wallpaper.CountdownXPercent, 50f, 70f);
         Wallpaper.CountdownWidthPercent = Math.Clamp(Wallpaper.CountdownWidthPercent, 25f, 44f);
@@ -42,10 +43,31 @@ internal sealed class AppConfig
             Schedule.Weekdays = ["周一", "周二", "周三", "周四", "周五"];
         }
 
-        if (Schedule.Rows == null || Schedule.Rows.Count == 0)
+        Schedule.Rows ??= [];
+        Events = Events.Where(item => item is not null).ToList();
+        Content.Quotes ??= [];
+
+        // v2 及更早版本没有明确区分“用户清空”和“配置缺失”。
+        // 只对旧版本的空集合补回默认值；v3 允许用户保存空列表。
+        if (SchemaVersion < 3)
         {
-            Schedule.Rows = ScheduleConfig.CreateDefault().Rows;
+            if (Schedule.Rows.Count == 0)
+            {
+                Schedule.Rows = ScheduleConfig.CreateDefault().Rows;
+            }
+
+            if (Events.Count == 0)
+            {
+                Events = CountdownEventConfig.CreateDefault();
+            }
+
+            if (Content.Quotes.Count == 0)
+            {
+                Content.Quotes = ContentConfig.CreateDefault().Quotes;
+            }
         }
+
+        NormalizeLayout();
 
         foreach (var row in Schedule.Rows)
         {
@@ -61,11 +83,6 @@ internal sealed class AppConfig
             }
         }
 
-        if (Events.Count == 0)
-        {
-            Events = CountdownEventConfig.CreateDefault();
-        }
-
         foreach (var item in Events)
         {
             item.Id = string.IsNullOrWhiteSpace(item.Id)
@@ -73,16 +90,40 @@ internal sealed class AppConfig
                 : item.Id;
             item.Title = string.IsNullOrWhiteSpace(item.Title) ? "未命名事件" : item.Title;
             item.Color = string.IsNullOrWhiteSpace(item.Color) ? "#B69A68" : item.Color;
-        }
-
-        Content.Quotes ??= [];
-        if (Content.Quotes.Count == 0)
-        {
-            Content.Quotes = ContentConfig.CreateDefault().Quotes;
+            item.Date = item.Date.Date;
         }
 
         Behavior.RefreshIntervalSeconds = Math.Clamp(Behavior.RefreshIntervalSeconds, 5, 300);
-        SchemaVersion = 2;
+        SchemaVersion = 3;
+    }
+
+    private void NormalizeLayout()
+    {
+        const float scheduleWidth = 46f;
+        const float rightMargin = 3f;
+        const float gap = 2f;
+
+        // 两块面板必须在同一张壁纸内完整显示，并至少保留一个小间距。
+        var maxCountdownX = 100f - Wallpaper.CountdownWidthPercent - rightMargin;
+        Wallpaper.CountdownXPercent = Math.Clamp(
+            Wallpaper.CountdownXPercent,
+            50f,
+            maxCountdownX);
+
+        var maximumScheduleX = Wallpaper.CountdownXPercent - gap - scheduleWidth;
+        if (Wallpaper.ScheduleXPercent > maximumScheduleX)
+        {
+            Wallpaper.ScheduleXPercent = Math.Clamp(maximumScheduleX, 3f, 25f);
+        }
+
+        var scheduleRight = Wallpaper.ScheduleXPercent + scheduleWidth;
+        if (Wallpaper.CountdownXPercent < scheduleRight + gap)
+        {
+            Wallpaper.CountdownXPercent = Math.Clamp(
+                scheduleRight + gap,
+                50f,
+                maxCountdownX);
+        }
     }
 }
 
@@ -90,8 +131,10 @@ internal sealed class WallpaperConfig
 {
     public string BackgroundPath { get; set; } = AppStorage.DefaultBackgroundPath;
     public string? OriginalWallpaperPath { get; set; }
-    public float ScheduleXPercent { get; set; } = 21.5f;
-    public float CountdownXPercent { get; set; } = 55f;
+    public string? OriginalWallpaperStyle { get; set; }
+    public string? OriginalTileWallpaper { get; set; }
+    public float ScheduleXPercent { get; set; } = 9f;
+    public float CountdownXPercent { get; set; } = 57f;
     public float CountdownWidthPercent { get; set; } = 40f;
     public bool ShowClock { get; set; } = true;
     public bool ShowProgress { get; set; } = true;
@@ -210,28 +253,44 @@ internal static class ConfigStore
         PropertyNameCaseInsensitive = true
     };
 
+    public static string? LastRecoveryPath { get; private set; }
+
     public static bool Exists => File.Exists(AppStorage.ConfigPath);
 
     public static AppConfig Load()
     {
-        AppConfig? config = null;
-        if (File.Exists(AppStorage.ConfigPath))
+        LastRecoveryPath = null;
+        AppConfig? config;
+        var shouldSave = false;
+
+        if (!File.Exists(AppStorage.ConfigPath))
         {
+            config = LoadLegacyOrDefault();
+            shouldSave = true;
+        }
+        else
+        {
+            var json = File.ReadAllText(AppStorage.ConfigPath);
             try
             {
-                config = System.Text.Json.JsonSerializer.Deserialize<AppConfig>(
-                    File.ReadAllText(AppStorage.ConfigPath), Options);
+                config = JsonSerializer.Deserialize<AppConfig>(json, Options);
+
+                if (config is null)
+                {
+                    throw new JsonException("配置文件为空。");
+                }
             }
-            catch
+            catch (JsonException)
             {
-                config = null;
+                LastRecoveryPath = BackupCorruptConfig();
+                config = LoadLegacyOrDefault();
+                shouldSave = true;
             }
         }
 
-        config ??= LoadLegacyOrDefault();
         config.Normalize();
 
-        if (!File.Exists(AppStorage.ConfigPath))
+        if (shouldSave)
         {
             Save(config);
         }
@@ -244,8 +303,22 @@ internal static class ConfigStore
         config.Normalize();
         Directory.CreateDirectory(AppStorage.RootDirectory);
         var temporaryPath = AppStorage.ConfigPath + ".tmp";
-        File.WriteAllText(temporaryPath, System.Text.Json.JsonSerializer.Serialize(config, Options));
+        File.WriteAllText(temporaryPath, JsonSerializer.Serialize(config, Options));
         File.Move(temporaryPath, AppStorage.ConfigPath, true);
+    }
+
+    private static string? BackupCorruptConfig()
+    {
+        try
+        {
+            var backupPath = AppStorage.ConfigPath + ".corrupt-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json";
+            File.Move(AppStorage.ConfigPath, backupPath, true);
+            return backupPath;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static AppConfig LoadLegacyOrDefault()

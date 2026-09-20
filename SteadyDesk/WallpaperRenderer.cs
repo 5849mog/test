@@ -14,9 +14,9 @@ internal static class WallpaperRenderer
         DateTime? nowOverride = null)
     {
         config.Normalize();
-        if (width < 800 || height < 450)
+        if (width < 480 || height < 270)
         {
-            throw new ArgumentOutOfRangeException(nameof(width), "屏幕分辨率过低，无法清晰显示完整课表。");
+            throw new ArgumentOutOfRangeException(nameof(width), "屏幕分辨率过低，无法生成壁纸。");
         }
 
         var now = nowOverride ?? DateTime.Now;
@@ -39,12 +39,15 @@ internal static class WallpaperRenderer
     {
         var theme = config.Theme;
         graphics.Clear(ParseColor(theme.Paper, Color.FromArgb(242, 235, 223)));
-        if (!File.Exists(config.Wallpaper.BackgroundPath))
+        var backgroundPath = File.Exists(config.Wallpaper.BackgroundPath)
+            ? config.Wallpaper.BackgroundPath
+            : AppStorage.DefaultBackgroundPath;
+        if (!File.Exists(backgroundPath))
         {
             return;
         }
 
-        using var source = Image.FromFile(config.Wallpaper.BackgroundPath);
+        using var source = Image.FromFile(backgroundPath);
         var scale = Math.Max((float)width / source.Width, (float)height / source.Height);
         var cropWidth = width / scale;
         var cropHeight = height / scale;
@@ -102,7 +105,9 @@ internal static class WallpaperRenderer
         using var titleBrush = new SolidBrush(ParseColor(theme.Ink, Color.Black));
         using var centered = CenterFormat();
 
-        graphics.DrawString("2026—2027 学年", yearFont, yearBrush,
+        var academicStartYear = today.Month >= 8 ? today.Year : today.Year - 1;
+        var academicYear = academicStartYear + "—" + (academicStartYear + 1) + " 学年";
+        graphics.DrawString(academicYear, yearFont, yearBrush,
             new RectangleF(content.X, content.Y, content.Width, 25f * scale), centered);
         graphics.DrawString(config.Content.ScheduleTitle, titleFont, titleBrush,
             new RectangleF(content.X, content.Y + 24f * scale, content.Width, 55f * scale), centered);
@@ -315,6 +320,7 @@ internal static class WallpaperRenderer
         using var whiteBrush = new SolidBrush(Color.FromArgb(244, ParseColor(theme.Paper, Color.White)));
         using var mutedBrush = new SolidBrush(Color.FromArgb(176, ParseColor(theme.Paper, Color.White)));
         using var goldBrush = new SolidBrush(ParseColor(theme.Champagne, Color.Goldenrod));
+        using var overflowFont = MakeFont("Microsoft YaHei", 12f * scale, FontStyle.Regular);
         using var center = CenterFormat();
 
         graphics.DrawString(config.Content.Eyebrow, eyebrowFont, goldBrush,
@@ -333,7 +339,9 @@ internal static class WallpaperRenderer
         graphics.DrawLine(linePen, inner.X + inner.Width * .28f, inner.Y + 72f * scale,
             inner.Right - inner.Width * .28f, inner.Y + 72f * scale);
 
-        var events = config.Events.Where(item => item.Visible).Take(3).ToList();
+        var allVisibleEvents = config.Events.Where(item => item.Visible).ToList();
+        var events = allVisibleEvents.Take(3).ToList();
+        var hiddenEventCount = allVisibleEvents.Count - events.Count;
         var cardTop = inner.Y + 92f * scale;
         var availableHeight = inner.Height - 250f * scale;
         var cardHeight = events.Count == 0 ? 180f * scale : Math.Min(205f * scale, availableHeight / events.Count - 12f * scale);
@@ -342,6 +350,16 @@ internal static class WallpaperRenderer
         {
             var card = new RectangleF(inner.X, cardTop + index * (cardHeight + 12f * scale), inner.Width, cardHeight);
             DrawEventCard(graphics, config, events[index], card, today, scale);
+        }
+
+        if (hiddenEventCount > 0)
+        {
+            graphics.DrawString(
+                "还有 " + hiddenEventCount + " 个事件未显示",
+                overflowFont,
+                mutedBrush,
+                new RectangleF(inner.X, inner.Bottom - 162f * scale, inner.Width, 22f * scale),
+                center);
         }
 
         if (events.Count == 0)
@@ -377,7 +395,7 @@ internal static class WallpaperRenderer
         using var accentPen = new Pen(ParseColor(item.Color, ParseColor(theme.Champagne, Color.Goldenrod)), Math.Max(2f, 2f * scale));
         using var center = CenterFormat();
         using var labelFont = MakeFont("Microsoft YaHei", 18f * scale, FontStyle.Regular);
-        using var numberFont = MakeFont("Georgia", Math.Max(42f, 78f * scale), FontStyle.Regular);
+        using var numberFont = MakeFont("Georgia", Math.Max(24f, 78f * scale), FontStyle.Regular);
         using var unitFont = MakeFont("SimSun", 25f * scale, FontStyle.Regular);
         using var dateFont = MakeFont("Georgia", 13f * scale, FontStyle.Regular);
         using var labelBrush = new SolidBrush(Color.FromArgb(238, ParseColor(theme.Champagne, Color.Goldenrod)));
@@ -416,13 +434,14 @@ internal static class WallpaperRenderer
 
         if (config.Wallpaper.ShowProgress && item.ShowProgress)
         {
-            DrawProgressBar(graphics, bounds, config.Content.PreparationStartDate, item.Date, today, scale);
+            DrawProgressBar(graphics, bounds, config.Theme, config.Content.PreparationStartDate, item.Date, today, scale);
         }
     }
 
     private static void DrawProgressBar(
         Graphics graphics,
         RectangleF bounds,
+        ThemeConfig theme,
         DateTime preparationStart,
         DateTime target,
         DateTime today,
@@ -435,12 +454,12 @@ internal static class WallpaperRenderer
         var right = bounds.Right - 20f * scale;
         var lineY = bounds.Bottom - 15f * scale;
 
-        using var trackPen = new Pen(Color.FromArgb(60, Color.White), Math.Max(2f, 3f * scale))
+        using var trackPen = new Pen(Color.FromArgb(60, ParseColor(theme.Paper, Color.White)), Math.Max(2f, 3f * scale))
         {
             StartCap = LineCap.Round,
             EndCap = LineCap.Round
         };
-        using var progressPen = new Pen(Color.FromArgb(220, Color.FromArgb(229, 203, 151)), Math.Max(2f, 3f * scale))
+        using var progressPen = new Pen(Color.FromArgb(220, ParseColor(theme.Champagne, Color.Goldenrod)), Math.Max(2f, 3f * scale))
         {
             StartCap = LineCap.Round,
             EndCap = LineCap.Round

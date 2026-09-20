@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
@@ -7,6 +8,7 @@ internal static class AutoStartManager
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "SteadyDesk";
+    private const string LegacyValueName = "ZhengTeacherCountdownWallpaper";
 
     public static bool IsEnabled
     {
@@ -26,12 +28,25 @@ internal static class AutoStartManager
         {
             var executable = Environment.ProcessPath
                 ?? throw new InvalidOperationException("无法获取程序路径。");
-            key.SetValue(ValueName, "\"" + executable + "\" --startup");
+            var entryAssemblyPath = Assembly.GetEntryAssembly()?.Location;
+            var executableName = Path.GetFileNameWithoutExtension(executable);
+            var command = string.Equals(executableName, "dotnet", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(entryAssemblyPath)
+                && File.Exists(entryAssemblyPath)
+                ? "\"" + executable + "\" \"" + entryAssemblyPath + "\" --startup"
+                : "\"" + executable + "\" --startup";
+            key.SetValue(ValueName, command);
         }
         else
         {
             key.DeleteValue(ValueName, false);
         }
+    }
+
+    public static void RemoveLegacyEntries()
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath, true);
+        key?.DeleteValue(LegacyValueName, false);
     }
 }
 
@@ -48,7 +63,10 @@ internal static class WallpaperManager
         string value,
         int flags);
 
-    public static void Apply(string imagePath)
+    public static void Apply(
+        string imagePath,
+        string? wallpaperStyle = null,
+        string? tileWallpaper = null)
     {
         if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
         {
@@ -57,8 +75,8 @@ internal static class WallpaperManager
 
         using (var desktopKey = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop", true))
         {
-            desktopKey?.SetValue("WallpaperStyle", "10");
-            desktopKey?.SetValue("TileWallpaper", "0");
+            desktopKey?.SetValue("WallpaperStyle", wallpaperStyle ?? "10");
+            desktopKey?.SetValue("TileWallpaper", tileWallpaper ?? "0");
         }
 
         if (!SystemParametersInfo(

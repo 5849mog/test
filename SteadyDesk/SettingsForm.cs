@@ -25,6 +25,33 @@ internal sealed class SettingsForm : Form
     private readonly Label _statusLabel;
     private readonly DataGridView _eventsGrid;
     private readonly DataGridView _scheduleGrid;
+    private readonly TrackBar _countdownPosition;
+    private readonly TrackBar _countdownWidth;
+    private readonly DateTimePicker _preparationStartDate;
+    private readonly NumericUpDown _refreshInterval;
+    private readonly TextBox _quotesBox;
+    private readonly TextBox[] _weekdayInputs;
+    private readonly Dictionary<string, TextBox> _themeInputs = new(StringComparer.OrdinalIgnoreCase);
+    private string? _pendingBackgroundPath;
+
+    private const string DefaultBackgroundMarker = "__STEADY_DESK_DEFAULT_BACKGROUND__";
+    private static readonly string[] ThemeNames =
+    [
+        nameof(ThemeConfig.Wine),
+        nameof(ThemeConfig.WineDeep),
+        nameof(ThemeConfig.Paper),
+        nameof(ThemeConfig.Ink),
+        nameof(ThemeConfig.InkSoft),
+        nameof(ThemeConfig.Gold),
+        nameof(ThemeConfig.Champagne)
+    ];
+
+    private sealed class ConfigPackage
+    {
+        public int PackageVersion { get; set; } = 1;
+        public AppConfig Config { get; set; } = AppConfig.CreateDefault();
+        public string? BackgroundFileName { get; set; }
+    }
 
     public AppConfig EditedConfig { get; private set; }
     public bool AutoStartEnabled => _autoStart.Checked;
@@ -34,6 +61,7 @@ internal sealed class SettingsForm : Form
     public SettingsForm(AppConfig source, bool autoStartEnabled)
     {
         _draft = source.Clone();
+        _draft.Behavior.AutoStart = autoStartEnabled;
         EditedConfig = _draft.Clone();
 
         Text = "稳序桌面 · 控制中心";
@@ -53,6 +81,34 @@ internal sealed class SettingsForm : Form
             BorderStyle = BorderStyle.FixedSingle
         };
         _schedulePosition = new TrackBar { Minimum = 6, Maximum = 50, TickFrequency = 4, SmallChange = 1, LargeChange = 4, Width = 410 };
+        _countdownPosition = new TrackBar { Minimum = 50, Maximum = 70, TickFrequency = 5, SmallChange = 1, LargeChange = 5, Width = 410 };
+        _countdownWidth = new TrackBar { Minimum = 25, Maximum = 44, TickFrequency = 4, SmallChange = 1, LargeChange = 4, Width = 410 };
+        _preparationStartDate = new DateTimePicker
+        {
+            Format = DateTimePickerFormat.Short,
+            Width = 160
+        };
+        _refreshInterval = new NumericUpDown
+        {
+            Minimum = 5,
+            Maximum = 300,
+            Increment = 5,
+            Width = 100
+        };
+        _quotesBox = new TextBox
+        {
+            Multiline = true,
+            ScrollBars = ScrollBars.Vertical,
+            Width = 620,
+            Height = 180
+        };
+        _weekdayInputs = Enumerable.Range(0, 5)
+            .Select(_ => new TextBox { Width = 70 })
+            .ToArray();
+        foreach (var themeName in ThemeNames)
+        {
+            _themeInputs[themeName] = new TextBox { Width = 180 };
+        }
         _titleBox = new TextBox { Width = 330 };
         _eyebrowBox = new TextBox { Width = 330 };
         _countdownTitleBox = new TextBox { Width = 330 };
@@ -115,6 +171,7 @@ internal sealed class SettingsForm : Form
         tabs.TabPages.Add(BuildEventsPage());
         tabs.TabPages.Add(BuildSchedulePage());
         tabs.TabPages.Add(BuildAppearancePage());
+        tabs.TabPages.Add(BuildContentPage());
         tabs.TabPages.Add(BuildSystemPage());
 
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
@@ -266,6 +323,8 @@ internal sealed class SettingsForm : Form
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         AddRow(panel, "课表水平位置", _schedulePosition);
+        AddRow(panel, "倒计时水平位置", _countdownPosition);
+        AddRow(panel, "倒计时宽度", _countdownWidth);
         AddRow(panel, "课表标题", _titleBox);
         AddRow(panel, "倒计时眉题", _eyebrowBox);
         AddRow(panel, "倒计时标题", _countdownTitleBox);
@@ -332,16 +391,102 @@ internal sealed class SettingsForm : Form
         return page;
     }
 
+    private TabPage BuildContentPage()
+    {
+        var page = CreatePage("内容与主题");
+        var scroll = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = Paper
+        };
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 2,
+            RowCount = 0,
+            Padding = new Padding(18),
+            BackColor = PaperBright
+        };
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        AddRow(panel, "准备起始日期", _preparationStartDate);
+        AddRow(panel, "刷新间隔（秒）", _refreshInterval);
+
+        var weekdays = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = false,
+            FlowDirection = FlowDirection.LeftToRight
+        };
+        for (var index = 0; index < _weekdayInputs.Length; index++)
+        {
+            weekdays.Controls.Add(new Label
+            {
+                Text = (index + 1) + "：",
+                AutoSize = true,
+                Margin = new Padding(3, 8, 1, 3)
+            });
+            weekdays.Controls.Add(_weekdayInputs[index]);
+        }
+
+        AddRow(panel, "工作日名称", weekdays);
+        AddRow(panel, "激励语（空行分隔）", _quotesBox);
+
+        foreach (var themeName in ThemeNames)
+        {
+            AddRow(panel, "主题色 · " + themeName, _themeInputs[themeName]);
+        }
+
+        scroll.Controls.Add(panel);
+        page.Controls.Add(scroll);
+        return page;
+    }
+
     private void LoadDraftIntoControls()
     {
         _schedulePosition.Value = Math.Clamp((int)Math.Round(_draft.Wallpaper.ScheduleXPercent * 2f), 6, 50);
+        _countdownPosition.Value = Math.Clamp((int)Math.Round(_draft.Wallpaper.CountdownXPercent), 50, 70);
+        _countdownWidth.Value = Math.Clamp((int)Math.Round(_draft.Wallpaper.CountdownWidthPercent), 25, 44);
         _titleBox.Text = _draft.Content.ScheduleTitle;
         _eyebrowBox.Text = _draft.Content.Eyebrow;
         _countdownTitleBox.Text = _draft.Content.CountdownTitle;
+
+        var preparationDate = _draft.Content.PreparationStartDate.Date;
+        if (preparationDate < _preparationStartDate.MinDate)
+        {
+            preparationDate = _preparationStartDate.MinDate;
+        }
+        else if (preparationDate > _preparationStartDate.MaxDate)
+        {
+            preparationDate = _preparationStartDate.MaxDate;
+        }
+
+        _preparationStartDate.Value = preparationDate;
+        _refreshInterval.Value = Math.Clamp(_draft.Behavior.RefreshIntervalSeconds, 5, 300);
+        _autoStart.Checked = _draft.Behavior.AutoStart;
         _showClock.Checked = _draft.Wallpaper.ShowClock;
         _showProgress.Checked = _draft.Wallpaper.ShowProgress;
         _showQuote.Checked = _draft.Wallpaper.ShowQuote;
         _backgroundLabel.Text = GetBackgroundName(_draft.Wallpaper.BackgroundPath);
+        _quotesBox.Text = string.Join(
+            Environment.NewLine + Environment.NewLine,
+            _draft.Content.Quotes);
+
+        for (var index = 0; index < _weekdayInputs.Length; index++)
+        {
+            _weekdayInputs[index].Text = index < _draft.Schedule.Weekdays.Count
+                ? _draft.Schedule.Weekdays[index]
+                : string.Empty;
+        }
+
+        foreach (var themeName in ThemeNames)
+        {
+            _themeInputs[themeName].Text = GetThemeValue(_draft.Theme, themeName);
+        }
+
         LoadEventGrid();
         LoadScheduleGrid();
     }
@@ -358,6 +503,13 @@ internal sealed class SettingsForm : Form
     private void LoadScheduleGrid()
     {
         _scheduleGrid.Rows.Clear();
+        for (var index = 0; index < 5; index++)
+        {
+            _scheduleGrid.Columns["day" + index].HeaderText = index < _draft.Schedule.Weekdays.Count
+                ? _draft.Schedule.Weekdays[index]
+                : "—";
+        }
+
         foreach (var row in _draft.Schedule.Rows)
         {
             var values = new object[10];
@@ -378,12 +530,31 @@ internal sealed class SettingsForm : Form
     private void ReadControlsIntoDraft()
     {
         _draft.Wallpaper.ScheduleXPercent = _schedulePosition.Value / 2f;
+        _draft.Wallpaper.CountdownXPercent = _countdownPosition.Value;
+        _draft.Wallpaper.CountdownWidthPercent = _countdownWidth.Value;
         _draft.Wallpaper.ShowClock = _showClock.Checked;
         _draft.Wallpaper.ShowProgress = _showProgress.Checked;
         _draft.Wallpaper.ShowQuote = _showQuote.Checked;
         _draft.Content.ScheduleTitle = _titleBox.Text.Trim();
         _draft.Content.Eyebrow = _eyebrowBox.Text.Trim();
         _draft.Content.CountdownTitle = _countdownTitleBox.Text.Trim();
+        _draft.Content.PreparationStartDate = _preparationStartDate.Value.Date;
+        _draft.Content.Quotes = ParseQuotes(_quotesBox.Text);
+        _draft.Schedule.Weekdays = _weekdayInputs
+            .Select(input => input.Text.Trim())
+            .ToList();
+        if (_draft.Schedule.Weekdays.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new InvalidOperationException("工作日名称不能为空。");
+        }
+
+        _draft.Theme.Wine = ReadColor(_themeInputs[nameof(ThemeConfig.Wine)], "Wine");
+        _draft.Theme.WineDeep = ReadColor(_themeInputs[nameof(ThemeConfig.WineDeep)], "WineDeep");
+        _draft.Theme.Paper = ReadColor(_themeInputs[nameof(ThemeConfig.Paper)], "Paper");
+        _draft.Theme.Ink = ReadColor(_themeInputs[nameof(ThemeConfig.Ink)], "Ink");
+        _draft.Theme.InkSoft = ReadColor(_themeInputs[nameof(ThemeConfig.InkSoft)], "InkSoft");
+        _draft.Theme.Gold = ReadColor(_themeInputs[nameof(ThemeConfig.Gold)], "Gold");
+        _draft.Theme.Champagne = ReadColor(_themeInputs[nameof(ThemeConfig.Champagne)], "Champagne");
 
         var events = new List<CountdownEventConfig>();
         foreach (DataGridViewRow row in _eventsGrid.Rows)
@@ -399,11 +570,18 @@ internal sealed class SettingsForm : Form
                 continue;
             }
 
-            var dateText = Convert.ToString(row.Cells["date"].Value);
+            var dateText = Convert.ToString(row.Cells["date"].Value)?.Trim();
             if (!DateTime.TryParse(dateText, out var date))
             {
-                date = DateTime.Today.AddDays(30);
+                throw new InvalidOperationException("事件“" + title + "”的日期无效，请使用 yyyy-MM-dd 格式。");
             }
+
+            var color = Convert.ToString(row.Cells["color"].Value)?.Trim();
+            if (string.IsNullOrWhiteSpace(color))
+            {
+                color = "#B69A68";
+            }
+            ValidateColor(color, "事件“" + title + "”的颜色");
 
             events.Add(new CountdownEventConfig
             {
@@ -412,14 +590,10 @@ internal sealed class SettingsForm : Form
                 Date = date.Date,
                 Visible = Convert.ToBoolean(row.Cells["visible"].Value ?? true),
                 ShowProgress = Convert.ToBoolean(row.Cells["progress"].Value ?? true),
-                Color = Convert.ToString(row.Cells["color"].Value) ?? "#B69A68"
+                Color = color
             });
         }
-
-        if (events.Count > 0)
-        {
-            _draft.Events = events;
-        }
+        _draft.Events = events;
 
         var schedule = new List<ScheduleRowConfig>();
         foreach (DataGridViewRow row in _scheduleGrid.Rows)
@@ -431,31 +605,38 @@ internal sealed class SettingsForm : Form
 
             var item = new ScheduleRowConfig
             {
-                Label = Convert.ToString(row.Cells["label"].Value) ?? string.Empty,
-                Time = Convert.ToString(row.Cells["time"].Value) ?? string.Empty,
-                Start = Convert.ToString(row.Cells["start"].Value) ?? string.Empty,
-                End = Convert.ToString(row.Cells["end"].Value) ?? string.Empty,
+                Label = Convert.ToString(row.Cells["label"].Value)?.Trim() ?? string.Empty,
+                Time = Convert.ToString(row.Cells["time"].Value)?.Trim() ?? string.Empty,
+                Start = Convert.ToString(row.Cells["start"].Value)?.Trim() ?? string.Empty,
+                End = Convert.ToString(row.Cells["end"].Value)?.Trim() ?? string.Empty,
                 IsBreak = Convert.ToBoolean(row.Cells["break"].Value ?? false),
                 Courses = []
             };
 
-            for (var i = 0; i < 5; i++)
+            for (var index = 0; index < 5; index++)
             {
-                item.Courses.Add(Convert.ToString(row.Cells["day" + i].Value) ?? string.Empty);
+                item.Courses.Add(Convert.ToString(row.Cells["day" + index].Value) ?? string.Empty);
             }
 
-            if (!string.IsNullOrWhiteSpace(item.Label))
+            if (string.IsNullOrWhiteSpace(item.Label))
             {
-                schedule.Add(item);
+                continue;
             }
-        }
 
-        if (schedule.Count > 0)
-        {
-            _draft.Schedule.Rows = schedule;
+            if (!TimeSpan.TryParse(item.Start, out var start)
+                || !TimeSpan.TryParse(item.End, out var end)
+                || end <= start)
+            {
+                throw new InvalidOperationException(
+                    "课表“" + item.Label + "”的开始/结束时间无效。");
+            }
+
+            schedule.Add(item);
         }
+        _draft.Schedule.Rows = schedule;
 
         _draft.Behavior.AutoStart = _autoStart.Checked;
+        _draft.Behavior.RefreshIntervalSeconds = (int)_refreshInterval.Value;
         _draft.Normalize();
     }
 
@@ -464,6 +645,12 @@ internal sealed class SettingsForm : Form
         try
         {
             ReadControlsIntoDraft();
+            if (_pendingBackgroundPath is not null)
+            {
+                _draft.Wallpaper.BackgroundPath = AppStorage.CommitBackground(_pendingBackgroundPath);
+                _pendingBackgroundPath = null;
+            }
+
             EditedConfig = _draft.Clone();
             DialogResult = DialogResult.OK;
             Close();
@@ -507,20 +694,27 @@ internal sealed class SettingsForm : Form
             return;
         }
 
+        var stagedPath = AppStorage.CreateTemporaryBackgroundPath();
         try
         {
-            _draft.Wallpaper.BackgroundPath = AppStorage.ImportBackground(dialog.FileName);
-            _backgroundLabel.Text = GetBackgroundName(_draft.Wallpaper.BackgroundPath);
+            AppStorage.ImportBackground(dialog.FileName, stagedPath);
+            AppStorage.DeleteIfExists(_pendingBackgroundPath);
+            _pendingBackgroundPath = stagedPath;
+            _draft.Wallpaper.BackgroundPath = stagedPath;
+            _backgroundLabel.Text = GetBackgroundName(stagedPath);
             RefreshPreview();
         }
         catch (Exception exception)
         {
+            AppStorage.DeleteIfExists(stagedPath);
             MessageBox.Show(this, exception.Message, "更换底图失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
     private void RestoreDefaultBackground()
     {
+        AppStorage.DeleteIfExists(_pendingBackgroundPath);
+        _pendingBackgroundPath = null;
         _draft.Wallpaper.BackgroundPath = AppStorage.DefaultBackgroundPath;
         _backgroundLabel.Text = GetBackgroundName(_draft.Wallpaper.BackgroundPath);
         RefreshPreview();
@@ -569,11 +763,42 @@ internal sealed class SettingsForm : Form
                 Filter = "稳序桌面配置|*.steady.json|JSON 文件|*.json",
                 FileName = "稳序桌面配置.steady.json"
             };
-            if (dialog.ShowDialog(this) == DialogResult.OK)
+            if (dialog.ShowDialog(this) != DialogResult.OK)
             {
-                File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(_draft, ConfigStore.Options));
-                _statusLabel.Text = "配置已导出。";
+                return;
             }
+
+            var exportConfig = _draft.Clone();
+            exportConfig.Wallpaper.OriginalWallpaperPath = null;
+            exportConfig.Wallpaper.OriginalWallpaperStyle = null;
+            exportConfig.Wallpaper.OriginalTileWallpaper = null;
+
+            var directory = Path.GetDirectoryName(dialog.FileName) ?? ".";
+            var backgroundFileName = DefaultBackgroundMarker;
+            var source = exportConfig.Wallpaper.BackgroundPath;
+            if (!IsDefaultBackground(source) && File.Exists(source))
+            {
+                backgroundFileName = Path.GetFileNameWithoutExtension(dialog.FileName) + ".background.png";
+                var destination = Path.Combine(directory, backgroundFileName);
+                if (!Path.GetFullPath(source).Equals(Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Copy(source, destination, true);
+                }
+
+                exportConfig.Wallpaper.BackgroundPath = backgroundFileName;
+            }
+            else
+            {
+                exportConfig.Wallpaper.BackgroundPath = DefaultBackgroundMarker;
+            }
+
+            var package = new ConfigPackage
+            {
+                Config = exportConfig,
+                BackgroundFileName = backgroundFileName
+            };
+            File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(package, ConfigStore.Options));
+            _statusLabel.Text = "配置和底图已导出。";
         }
         catch (Exception exception)
         {
@@ -583,6 +808,8 @@ internal sealed class SettingsForm : Form
 
     private void ImportConfig()
     {
+        string? newlyStagedBackgroundPath = null;
+
         using var dialog = new OpenFileDialog
         {
             Title = "导入稳序桌面配置",
@@ -596,16 +823,91 @@ internal sealed class SettingsForm : Form
 
         try
         {
-            var imported = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(dialog.FileName), ConfigStore.Options)
-                ?? throw new InvalidOperationException("配置文件为空或格式不正确。");
+            var json = File.ReadAllText(dialog.FileName);
+            AppConfig imported;
+            string? packageBackground = null;
+
+            using (var document = JsonDocument.Parse(json))
+            {
+                if (document.RootElement.TryGetProperty("Config", out _))
+                {
+                    var package = JsonSerializer.Deserialize<ConfigPackage>(json, ConfigStore.Options)
+                        ?? throw new InvalidOperationException("配置包为空。");
+                    imported = package.Config;
+                    packageBackground = package.BackgroundFileName;
+                }
+                else
+                {
+                    imported = JsonSerializer.Deserialize<AppConfig>(json, ConfigStore.Options)
+                        ?? throw new InvalidOperationException("配置文件为空或格式不正确。");
+                }
+            }
+
             imported.Normalize();
+
+            var currentOriginalPath = _draft.Wallpaper.OriginalWallpaperPath;
+            var currentOriginalStyle = _draft.Wallpaper.OriginalWallpaperStyle;
+            var currentOriginalTile = _draft.Wallpaper.OriginalTileWallpaper;
+            var configDirectory = Path.GetDirectoryName(dialog.FileName) ?? ".";
+            var importedBackgroundPath = imported.Wallpaper.BackgroundPath;
+            string? sourceBackground = null;
+            string? warning = null;
+
+            if (!string.Equals(importedBackgroundPath, DefaultBackgroundMarker, StringComparison.OrdinalIgnoreCase))
+            {
+                var candidate = packageBackground;
+                if (string.IsNullOrWhiteSpace(candidate))
+                {
+                    candidate = importedBackgroundPath;
+                }
+
+                if (!string.IsNullOrWhiteSpace(candidate))
+                {
+                    sourceBackground = Path.IsPathRooted(candidate)
+                        ? candidate
+                        : Path.Combine(configDirectory, candidate);
+                }
+            }
+
+            var previousPendingBackgroundPath = _pendingBackgroundPath;
+            if (!string.IsNullOrWhiteSpace(sourceBackground) && File.Exists(sourceBackground))
+            {
+                newlyStagedBackgroundPath = AppStorage.CreateTemporaryBackgroundPath();
+                AppStorage.ImportBackground(sourceBackground, newlyStagedBackgroundPath);
+                imported.Wallpaper.BackgroundPath = newlyStagedBackgroundPath;
+            }
+            else
+            {
+                if (!string.Equals(importedBackgroundPath, DefaultBackgroundMarker, StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(importedBackgroundPath))
+                {
+                    warning = "配置中的底图文件未找到，已改用内置默认底图。";
+                }
+                imported.Wallpaper.BackgroundPath = AppStorage.DefaultBackgroundPath;
+            }
+
+            imported.Wallpaper.OriginalWallpaperPath = currentOriginalPath;
+            imported.Wallpaper.OriginalWallpaperStyle = currentOriginalStyle;
+            imported.Wallpaper.OriginalTileWallpaper = currentOriginalTile;
+            imported.Normalize();
+            AppStorage.DeleteIfExists(previousPendingBackgroundPath);
+            _pendingBackgroundPath = newlyStagedBackgroundPath;
             _draft = imported;
+            _autoStart.Checked = imported.Behavior.AutoStart;
             LoadDraftIntoControls();
             RefreshPreview();
-            _statusLabel.Text = "配置已导入，点击“应用设置”后生效。";
+            _statusLabel.Text = warning is null
+                ? "配置和底图已导入，点击“应用设置”后生效。"
+                : warning + " 点击“应用设置”后生效。";
         }
         catch (Exception exception)
         {
+            if (newlyStagedBackgroundPath is not null
+                && !string.Equals(newlyStagedBackgroundPath, _pendingBackgroundPath, StringComparison.OrdinalIgnoreCase))
+            {
+                AppStorage.DeleteIfExists(newlyStagedBackgroundPath);
+            }
+
             MessageBox.Show(this, exception.Message, "导入失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
@@ -617,6 +919,8 @@ internal sealed class SettingsForm : Form
             return;
         }
 
+        AppStorage.DeleteIfExists(_pendingBackgroundPath);
+        _pendingBackgroundPath = null;
         _draft = AppConfig.CreateDefault();
         _draft.Behavior.AutoStart = _autoStart.Checked;
         LoadDraftIntoControls();
@@ -625,11 +929,80 @@ internal sealed class SettingsForm : Form
 
     private static void OpenDataFolder()
     {
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        try
         {
-            FileName = AppStorage.RootDirectory,
-            UseShellExecute = true
-        });
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = AppStorage.RootDirectory,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(exception.Message, "打开数据文件夹失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private static List<string> ParseQuotes(string text)
+    {
+        return text
+            .Replace("\r\n", "\n")
+            .Split("\n\n", StringSplitOptions.RemoveEmptyEntries)
+            .Select(item => item.Trim())
+            .Where(item => item.Length > 0)
+            .ToList();
+    }
+
+    private static string ReadColor(TextBox box, string name)
+    {
+        var value = box.Text.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException("主题色“" + name + "”不能为空。");
+        }
+
+        ValidateColor(value, "主题色“" + name + "”");
+        return value;
+    }
+
+    private static void ValidateColor(string value, string name)
+    {
+        try
+        {
+            ColorTranslator.FromHtml(value);
+        }
+        catch
+        {
+            throw new InvalidOperationException(name + "无效，请使用例如 #6D1F2A 的格式。");
+        }
+    }
+
+    private static string GetThemeValue(ThemeConfig theme, string name)
+    {
+        return name switch
+        {
+            nameof(ThemeConfig.Wine) => theme.Wine,
+            nameof(ThemeConfig.WineDeep) => theme.WineDeep,
+            nameof(ThemeConfig.Paper) => theme.Paper,
+            nameof(ThemeConfig.Ink) => theme.Ink,
+            nameof(ThemeConfig.InkSoft) => theme.InkSoft,
+            nameof(ThemeConfig.Gold) => theme.Gold,
+            nameof(ThemeConfig.Champagne) => theme.Champagne,
+            _ => string.Empty
+        };
+    }
+
+    private static bool IsDefaultBackground(string path)
+    {
+        return string.Equals(path, DefaultBackgroundMarker, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(path, AppStorage.DefaultBackgroundPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetBackgroundName(string path)
+    {
+        return IsDefaultBackground(path)
+            ? "内置默认底图"
+            : Path.GetFileName(path);
     }
 
     private static TabPage CreatePage(string text)
@@ -639,7 +1012,7 @@ internal sealed class SettingsForm : Form
 
     private static DataGridView CreateGrid()
     {
-        return new DataGridView
+        var grid = new DataGridView
         {
             Dock = DockStyle.Fill,
             BackgroundColor = PaperBright,
@@ -649,8 +1022,14 @@ internal sealed class SettingsForm : Form
             AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
             RowHeadersVisible = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            MultiSelect = true
+            MultiSelect = true,
+            EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2
         };
+        grid.DataError += (_, eventArgs) =>
+        {
+            eventArgs.ThrowException = false;
+        };
+        return grid;
     }
 
     private static Label SectionTitle(string text)
@@ -701,7 +1080,8 @@ internal sealed class SettingsForm : Form
 
     private static void AddRow(TableLayoutPanel panel, string label, Control control)
     {
-        var row = panel.RowCount++;
+        var row = panel.RowCount;
+        panel.RowCount++;
         panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         var title = new Label
         {
@@ -715,18 +1095,13 @@ internal sealed class SettingsForm : Form
         panel.Controls.Add(control, 1, row);
     }
 
-    private static string GetBackgroundName(string path)
-    {
-        return path.Equals(AppStorage.DefaultBackgroundPath, StringComparison.OrdinalIgnoreCase)
-            ? "内置默认底图"
-            : Path.GetFileName(path);
-    }
-
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
             _preview.Image?.Dispose();
+            AppStorage.DeleteIfExists(_pendingBackgroundPath);
+            _pendingBackgroundPath = null;
         }
 
         base.Dispose(disposing);
