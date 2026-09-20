@@ -63,7 +63,7 @@ jobs:
 
           Invoke-Preview 1280 720
 
-          $configPath = Join-Path $profileRoot "稳序桌面/settings.json"
+          $configPath = Join-Path $profileRoot "稳序桌面/config.json"
           if (-not (Test-Path $configPath)) {
             throw "First-run configuration was not created."
           }
