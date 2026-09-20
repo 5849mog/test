@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
@@ -27,7 +28,14 @@ internal static class AutoStartManager
         {
             var executable = Environment.ProcessPath
                 ?? throw new InvalidOperationException("无法获取程序路径。");
-            key.SetValue(ValueName, "\"" + executable + "\" --startup");
+            var entryAssemblyPath = Assembly.GetEntryAssembly()?.Location;
+            var executableName = Path.GetFileNameWithoutExtension(executable);
+            var command = string.Equals(executableName, "dotnet", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(entryAssemblyPath)
+                && File.Exists(entryAssemblyPath)
+                ? "\"" + executable + "\" \"" + entryAssemblyPath + "\" --startup"
+                : "\"" + executable + "\" --startup";
+            key.SetValue(ValueName, command);
         }
         else
         {
