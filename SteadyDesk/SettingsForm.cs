@@ -841,6 +841,8 @@ internal sealed class SettingsForm : Form
                 }
             }
 
+            imported.Normalize();
+
             var currentOriginalPath = _draft.Wallpaper.OriginalWallpaperPath;
             var currentOriginalStyle = _draft.Wallpaper.OriginalWallpaperStyle;
             var currentOriginalTile = _draft.Wallpaper.OriginalTileWallpaper;

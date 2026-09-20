@@ -320,6 +320,7 @@ internal static class WallpaperRenderer
         using var whiteBrush = new SolidBrush(Color.FromArgb(244, ParseColor(theme.Paper, Color.White)));
         using var mutedBrush = new SolidBrush(Color.FromArgb(176, ParseColor(theme.Paper, Color.White)));
         using var goldBrush = new SolidBrush(ParseColor(theme.Champagne, Color.Goldenrod));
+        using var overflowFont = MakeFont("Microsoft YaHei", 12f * scale, FontStyle.Regular);
         using var center = CenterFormat();
 
         graphics.DrawString(config.Content.Eyebrow, eyebrowFont, goldBrush,
@@ -355,7 +356,7 @@ internal static class WallpaperRenderer
         {
             graphics.DrawString(
                 "还有 " + hiddenEventCount + " 个事件未显示",
-                MakeFont("Microsoft YaHei", 12f * scale, FontStyle.Regular),
+                overflowFont,
                 mutedBrush,
                 new RectangleF(inner.X, inner.Bottom - 162f * scale, inner.Width, 22f * scale),
                 center);
