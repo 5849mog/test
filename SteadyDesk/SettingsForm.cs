@@ -27,6 +27,8 @@ internal sealed class SettingsForm : Form
     private readonly Label _statusLabel;
     private readonly DataGridView _eventsGrid;
     private readonly DataGridView _scheduleGrid;
+    private readonly DataGridView _dateOverridesGrid;
+    private readonly Dictionary<(string PeriodId, int DayIndex), ScheduleCellConfig> _scheduleCellDrafts = [];
     private readonly TrackBar _countdownPosition;
     private readonly TrackBar _countdownWidth;
     private readonly DateTimePicker _preparationStartDate;
@@ -50,7 +52,7 @@ internal sealed class SettingsForm : Form
 
     private sealed class ConfigPackage
     {
-        public int PackageVersion { get; set; } = 1;
+        public int PackageVersion { get; set; } = 2;
         public AppConfig Config { get; set; } = AppConfig.CreateDefault();
         public string? BackgroundFileName { get; set; }
     }
@@ -141,6 +143,15 @@ internal sealed class SettingsForm : Form
 
         _eventsGrid = CreateGrid();
         _scheduleGrid = CreateGrid();
+        _dateOverridesGrid = CreateGrid();
+        _scheduleGrid.CellDoubleClick += (_, eventArgs) =>
+        {
+            if (eventArgs.RowIndex >= 0 && eventArgs.ColumnIndex >= 0)
+            {
+                EditScheduleCell(eventArgs.RowIndex, eventArgs.ColumnIndex);
+            }
+        };
+        _scheduleGrid.CellFormatting += FormatScheduleCell;
 
         BuildUi();
         ApplyControlTheme(this);
@@ -213,6 +224,7 @@ internal sealed class SettingsForm : Form
         tabs.TabPages.Add(BuildOverviewPage());
         tabs.TabPages.Add(BuildEventsPage());
         tabs.TabPages.Add(BuildSchedulePage());
+        tabs.TabPages.Add(BuildDateOverridesPage());
         tabs.TabPages.Add(BuildAppearancePage());
         tabs.TabPages.Add(BuildContentPage());
         tabs.TabPages.Add(BuildSystemPage());
@@ -318,15 +330,25 @@ internal sealed class SettingsForm : Form
     private TabPage BuildSchedulePage()
     {
         var page = CreatePage("课表");
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, BackColor = Paper };
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 3,
+            BackColor = Paper
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
-        _scheduleGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "label", HeaderText = "节次", Width = 100 });
-        _scheduleGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "time", HeaderText = "显示时间", Width = 120 });
-        _scheduleGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "start", HeaderText = "开始", Width = 75 });
-        _scheduleGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "end", HeaderText = "结束", Width = 75 });
-        _scheduleGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "break", HeaderText = "课间", Width = 60 });
+        root.Controls.Add(MutedLabel(
+            "直接编辑课程名称；双击周一至周五的课程格，可设置空课、课间或这一天的特殊时间。",
+            900,
+            36), 0, 0);
+
+        _scheduleGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "label", HeaderText = "节次", Width = 105 });
+        _scheduleGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "start", HeaderText = "默认开始", Width = 85 });
+        _scheduleGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "end", HeaderText = "默认结束", Width = 85 });
+        _scheduleGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "break", HeaderText = "课间", Width = 58 });
         for (var i = 0; i < 5; i++)
         {
             _scheduleGrid.Columns.Add(new DataGridViewTextBoxColumn
@@ -337,22 +359,79 @@ internal sealed class SettingsForm : Form
             });
         }
 
-        root.Controls.Add(_scheduleGrid, 0, 0);
-        var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        root.Controls.Add(_scheduleGrid, 0, 1);
+        var bar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
+        };
         var add = MakeButton("添加课表行", false);
         add.Click += (_, _) => AddScheduleRow();
         var remove = MakeButton("删除选中", false);
         remove.Click += (_, _) => RemoveScheduleRow();
+        var edit = MakeButton("编辑选中课程格", false);
+        edit.Click += (_, _) =>
+        {
+            if (_scheduleGrid.CurrentCell is not null)
+            {
+                EditScheduleCell(_scheduleGrid.CurrentCell.RowIndex, _scheduleGrid.CurrentCell.ColumnIndex);
+            }
+        };
         var reset = MakeButton("恢复默认课表", false);
         reset.Click += (_, _) =>
         {
             _draft.Schedule = ScheduleConfig.CreateDefault();
             LoadScheduleGrid();
+            LoadDateOverridesGrid();
         };
         bar.Controls.Add(add);
         bar.Controls.Add(remove);
+        bar.Controls.Add(edit);
         bar.Controls.Add(reset);
-        root.Controls.Add(bar, 0, 1);
+        root.Controls.Add(bar, 0, 2);
+        page.Controls.Add(root);
+        return page;
+    }
+
+    private TabPage BuildDateOverridesPage()
+    {
+        var page = CreatePage("特殊日期");
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 3,
+            BackColor = Paper
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+
+        root.Controls.Add(MutedLabel(
+            "可以把某个具体日期设为停课，或让它套用周一至周五中的任意一天。日期规则优先于普通周课表。",
+            900,
+            50), 0, 0);
+
+        _dateOverridesGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "date", HeaderText = "日期", Width = 130 });
+        _dateOverridesGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "label", HeaderText = "说明", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _dateOverridesGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "dayOff", HeaderText = "停课", Width = 70 });
+        _dateOverridesGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "baseDay", HeaderText = "套用星期", Width = 120 });
+        root.Controls.Add(_dateOverridesGrid, 0, 1);
+
+        var bar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
+        };
+        var add = MakeButton("添加特殊日期", false);
+        add.Click += (_, _) => AddDateOverride();
+        var remove = MakeButton("删除选中", false);
+        remove.Click += (_, _) => RemoveDateOverride();
+        bar.Controls.Add(add);
+        bar.Controls.Add(remove);
+        root.Controls.Add(bar, 0, 2);
+
         page.Controls.Add(root);
         return page;
     }
@@ -538,6 +617,7 @@ internal sealed class SettingsForm : Form
 
         LoadEventGrid();
         LoadScheduleGrid();
+        LoadDateOverridesGrid();
     }
 
     private void LoadEventGrid()
@@ -552,6 +632,8 @@ internal sealed class SettingsForm : Form
     private void LoadScheduleGrid()
     {
         _scheduleGrid.Rows.Clear();
+        _scheduleCellDrafts.Clear();
+
         for (var index = 0; index < 5; index++)
         {
             _scheduleGrid.Columns["day" + index].HeaderText = index < _draft.Schedule.Weekdays.Count
@@ -559,20 +641,52 @@ internal sealed class SettingsForm : Form
                 : "—";
         }
 
-        foreach (var row in _draft.Schedule.Rows)
+        foreach (var day in _draft.Schedule.Days)
         {
-            var values = new object[10];
-            values[0] = row.Label;
-            values[1] = row.Time;
-            values[2] = row.Start;
-            values[3] = row.End;
-            values[4] = row.IsBreak;
-            for (var i = 0; i < 5; i++)
+            foreach (var cell in day.Cells)
             {
-                values[5 + i] = i < row.Courses.Count ? row.Courses[i] : string.Empty;
+                _scheduleCellDrafts[(cell.PeriodId, day.DayIndex)] = ScheduleEngine.CloneCell(cell);
+            }
+        }
+
+        foreach (var period in _draft.Schedule.Periods)
+        {
+            var values = new object[9];
+            values[0] = period.Label;
+            values[1] = period.Start;
+            values[2] = period.End;
+            values[3] = period.Kind == ScheduleCellKind.Break;
+            for (var dayIndex = 0; dayIndex < 5; dayIndex++)
+            {
+                values[4 + dayIndex] = _scheduleCellDrafts.TryGetValue((period.Id, dayIndex), out var cell)
+                    && cell.Kind != ScheduleCellKind.Empty
+                        ? cell.Course
+                        : string.Empty;
             }
 
-            _scheduleGrid.Rows.Add(values);
+            var rowIndex = _scheduleGrid.Rows.Add(values);
+            _scheduleGrid.Rows[rowIndex].Tag = period.Id;
+        }
+
+        _scheduleGrid.Invalidate();
+    }
+
+    private void LoadDateOverridesGrid()
+    {
+        _dateOverridesGrid.Rows.Clear();
+        foreach (var item in _draft.Schedule.DateOverrides.OrderBy(item => item.Date))
+        {
+            var baseDay = item.BaseDayIndex is >= 0 and < 5
+                ? _draft.Schedule.Weekdays[item.BaseDayIndex.Value]
+                : "当天";
+            var rowIndex = _dateOverridesGrid.Rows.Add(
+                item.Date.ToString("yyyy-MM-dd"),
+                item.Label,
+                item.IsDayOff,
+                baseDay);
+            _dateOverridesGrid.Rows[rowIndex].Tag = item.Cells
+                .Select(ScheduleEngine.CloneCell)
+                .ToList();
         }
     }
 
@@ -644,49 +758,13 @@ internal sealed class SettingsForm : Form
         }
         _draft.Events = events;
 
-        var schedule = new List<ScheduleRowConfig>();
-        foreach (DataGridViewRow row in _scheduleGrid.Rows)
-        {
-            if (row.IsNewRow)
-            {
-                continue;
-            }
-
-            var item = new ScheduleRowConfig
-            {
-                Label = Convert.ToString(row.Cells["label"].Value)?.Trim() ?? string.Empty,
-                Time = Convert.ToString(row.Cells["time"].Value)?.Trim() ?? string.Empty,
-                Start = Convert.ToString(row.Cells["start"].Value)?.Trim() ?? string.Empty,
-                End = Convert.ToString(row.Cells["end"].Value)?.Trim() ?? string.Empty,
-                IsBreak = Convert.ToBoolean(row.Cells["break"].Value ?? false),
-                Courses = []
-            };
-
-            for (var index = 0; index < 5; index++)
-            {
-                item.Courses.Add(Convert.ToString(row.Cells["day" + index].Value) ?? string.Empty);
-            }
-
-            if (string.IsNullOrWhiteSpace(item.Label))
-            {
-                continue;
-            }
-
-            if (!TimeSpan.TryParse(item.Start, out var start)
-                || !TimeSpan.TryParse(item.End, out var end)
-                || end <= start)
-            {
-                throw new InvalidOperationException(
-                    "课表“" + item.Label + "”的开始/结束时间无效。");
-            }
-
-            schedule.Add(item);
-        }
-        _draft.Schedule.Rows = schedule;
+        ReadScheduleIntoDraft();
+        ReadDateOverridesIntoDraft();
 
         _draft.Behavior.AutoStart = _autoStart.Checked;
         _draft.Behavior.RefreshIntervalSeconds = (int)_refreshInterval.Value;
         _draft.Normalize();
+        ScheduleEngine.ValidateOrThrow(_draft.Schedule);
     }
 
     private void ApplyAndClose()
@@ -787,16 +865,345 @@ internal sealed class SettingsForm : Form
 
     private void AddScheduleRow()
     {
-        _scheduleGrid.Rows.Add("新课程", "08:00–08:40", "08:00", "08:40", false, "", "", "", "", "");
+        var periodId = "period-" + Guid.NewGuid().ToString("N");
+        var rowIndex = _scheduleGrid.Rows.Add(
+            "新课程",
+            "08:00",
+            "08:40",
+            false,
+            "",
+            "",
+            "",
+            "",
+            "");
+        _scheduleGrid.Rows[rowIndex].Tag = periodId;
+        for (var dayIndex = 0; dayIndex < 5; dayIndex++)
+        {
+            _scheduleCellDrafts[(periodId, dayIndex)] = new ScheduleCellConfig
+            {
+                PeriodId = periodId,
+                Kind = ScheduleCellKind.Empty
+            };
+        }
     }
 
     private void RemoveScheduleRow()
     {
         foreach (DataGridViewRow row in _scheduleGrid.SelectedRows)
         {
+            if (row.IsNewRow)
+            {
+                continue;
+            }
+
+            if (row.Tag is string periodId)
+            {
+                for (var dayIndex = 0; dayIndex < 5; dayIndex++)
+                {
+                    _scheduleCellDrafts.Remove((periodId, dayIndex));
+                }
+            }
+
+            _scheduleGrid.Rows.Remove(row);
+        }
+    }
+
+    private void EditScheduleCell(int rowIndex, int columnIndex)
+    {
+        if (rowIndex < 0
+            || rowIndex >= _scheduleGrid.Rows.Count
+            || columnIndex < 0
+            || columnIndex >= _scheduleGrid.Columns.Count)
+        {
+            return;
+        }
+
+        var columnName = _scheduleGrid.Columns[columnIndex].Name;
+        if (!columnName.StartsWith("day", StringComparison.Ordinal)
+            || !int.TryParse(columnName.AsSpan(3), out var dayIndex)
+            || dayIndex is < 0 or > 4)
+        {
+            _statusLabel.Text = "请选择周一至周五中的一个课程格。";
+            return;
+        }
+
+        var row = _scheduleGrid.Rows[rowIndex];
+        if (row.IsNewRow)
+        {
+            return;
+        }
+
+        var period = CreatePeriodFromGridRow(row);
+        var key = (period.Id, dayIndex);
+        var source = _scheduleCellDrafts.TryGetValue(key, out var configuredCell)
+            ? ScheduleEngine.CloneCell(configuredCell)
+            : new ScheduleCellConfig { PeriodId = period.Id };
+
+        var course = Convert.ToString(row.Cells[columnName].Value)?.Trim() ?? string.Empty;
+        if (course is "—" or "-")
+        {
+            course = string.Empty;
+        }
+
+        source.Course = course;
+        if (string.IsNullOrWhiteSpace(course))
+        {
+            source.Kind = ScheduleCellKind.Empty;
+        }
+        else if (source.Kind == ScheduleCellKind.Empty)
+        {
+            source.Kind = period.Kind == ScheduleCellKind.Break
+                ? ScheduleCellKind.Break
+                : ScheduleCellKind.Class;
+        }
+
+        var dayName = dayIndex < _draft.Schedule.Weekdays.Count
+            ? _draft.Schedule.Weekdays[dayIndex]
+            : "工作日";
+        using var dialog = new ScheduleCellEditorForm(source, period, dayName);
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        _scheduleCellDrafts[key] = ScheduleEngine.CloneCell(dialog.EditedCell);
+        row.Cells[columnName].Value = dialog.EditedCell.Kind == ScheduleCellKind.Empty
+            ? string.Empty
+            : dialog.EditedCell.Course;
+        _scheduleGrid.InvalidateCell(columnIndex, rowIndex);
+        _statusLabel.Text = dialog.EditedCell.Kind == ScheduleCellKind.Empty
+            ? dayName + "的该课程格已设为空课。"
+            : dayName + "的课程格设置已更新。";
+    }
+
+    private void FormatScheduleCell(object? sender, DataGridViewCellFormattingEventArgs eventArgs)
+    {
+        if (eventArgs.RowIndex < 0
+            || eventArgs.ColumnIndex < 0
+            || eventArgs.RowIndex >= _scheduleGrid.Rows.Count)
+        {
+            return;
+        }
+
+        var columnName = _scheduleGrid.Columns[eventArgs.ColumnIndex].Name;
+        if (!columnName.StartsWith("day", StringComparison.Ordinal)
+            || !int.TryParse(columnName.AsSpan(3), out var dayIndex))
+        {
+            return;
+        }
+
+        var row = _scheduleGrid.Rows[eventArgs.RowIndex];
+        if (row.Tag is not string periodId)
+        {
+            return;
+        }
+
+        var rawCourse = Convert.ToString(row.Cells[eventArgs.ColumnIndex].Value)?.Trim() ?? string.Empty;
+        if (!_scheduleCellDrafts.TryGetValue((periodId, dayIndex), out var cell))
+        {
+            eventArgs.Value = string.IsNullOrWhiteSpace(rawCourse) ? "—" : rawCourse;
+            eventArgs.FormattingApplied = true;
+            return;
+        }
+
+        if (cell.Kind == ScheduleCellKind.Empty || string.IsNullOrWhiteSpace(rawCourse))
+        {
+            eventArgs.Value = "—";
+            eventArgs.CellStyle.ForeColor = Muted;
+        }
+        else
+        {
+            var hasOverride = !string.IsNullOrWhiteSpace(cell.StartOverride)
+                && !string.IsNullOrWhiteSpace(cell.EndOverride);
+            eventArgs.Value = rawCourse + (hasOverride ? "  ⏱" : string.Empty);
+            if (hasOverride)
+            {
+                row.Cells[eventArgs.ColumnIndex].ToolTipText =
+                    "特殊时间 " + cell.StartOverride + "–" + cell.EndOverride;
+            }
+        }
+
+        eventArgs.FormattingApplied = true;
+    }
+
+    private SchedulePeriodConfig CreatePeriodFromGridRow(DataGridViewRow row)
+    {
+        var periodId = row.Tag as string;
+        if (string.IsNullOrWhiteSpace(periodId))
+        {
+            periodId = "period-" + Guid.NewGuid().ToString("N");
+            row.Tag = periodId;
+        }
+
+        var label = Convert.ToString(row.Cells["label"].Value)?.Trim() ?? string.Empty;
+        var start = Convert.ToString(row.Cells["start"].Value)?.Trim() ?? string.Empty;
+        var end = Convert.ToString(row.Cells["end"].Value)?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            throw new InvalidOperationException("课节名称不能为空。");
+        }
+
+        if (!ScheduleEngine.TryParseTimeRange(start, end, out _, out _))
+        {
+            throw new InvalidOperationException("课节“" + label + "”的默认时间无效。");
+        }
+
+        var existing = _draft.Schedule.Periods
+            .FirstOrDefault(period => period.Id.Equals(periodId, StringComparison.OrdinalIgnoreCase));
+        return new SchedulePeriodConfig
+        {
+            Id = periodId,
+            Label = label,
+            Start = start,
+            End = end,
+            Note = existing?.Note,
+            Kind = Convert.ToBoolean(row.Cells["break"].Value ?? false)
+                ? ScheduleCellKind.Break
+                : ScheduleCellKind.Class
+        };
+    }
+
+    private void ReadScheduleIntoDraft()
+    {
+        var periodRows = new List<(SchedulePeriodConfig Period, DataGridViewRow Row)>();
+        foreach (DataGridViewRow row in _scheduleGrid.Rows)
+        {
+            if (row.IsNewRow)
+            {
+                continue;
+            }
+
+            var label = Convert.ToString(row.Cells["label"].Value)?.Trim();
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                continue;
+            }
+
+            periodRows.Add((CreatePeriodFromGridRow(row), row));
+        }
+
+        var days = Enumerable.Range(0, 5)
+            .Select(dayIndex => new ScheduleDayConfig { DayIndex = dayIndex })
+            .ToList();
+
+        foreach (var (period, row) in periodRows)
+        {
+            for (var dayIndex = 0; dayIndex < 5; dayIndex++)
+            {
+                var key = (period.Id, dayIndex);
+                var cell = _scheduleCellDrafts.TryGetValue(key, out var configuredCell)
+                    ? ScheduleEngine.CloneCell(configuredCell)
+                    : new ScheduleCellConfig { PeriodId = period.Id };
+
+                var course = Convert.ToString(row.Cells["day" + dayIndex].Value)?.Trim() ?? string.Empty;
+                if (course is "—" or "-")
+                {
+                    course = string.Empty;
+                }
+
+                cell.PeriodId = period.Id;
+                cell.Course = course;
+                if (string.IsNullOrWhiteSpace(course))
+                {
+                    cell.Kind = ScheduleCellKind.Empty;
+                    cell.StartOverride = null;
+                    cell.EndOverride = null;
+                }
+                else if (period.Kind == ScheduleCellKind.Break)
+                {
+                    cell.Kind = ScheduleCellKind.Break;
+                }
+                else if (cell.Kind == ScheduleCellKind.Empty)
+                {
+                    cell.Kind = ScheduleCellKind.Class;
+                }
+
+                days[dayIndex].Cells.Add(cell);
+                _scheduleCellDrafts[key] = ScheduleEngine.CloneCell(cell);
+            }
+        }
+
+        _draft.Schedule.Periods = periodRows.Select(item => item.Period).ToList();
+        _draft.Schedule.Days = days;
+        _draft.Schedule.Rows = null;
+    }
+
+    private void ReadDateOverridesIntoDraft()
+    {
+        var overrides = new List<ScheduleDateOverrideConfig>();
+        foreach (DataGridViewRow row in _dateOverridesGrid.Rows)
+        {
+            if (row.IsNewRow)
+            {
+                continue;
+            }
+
+            var dateText = Convert.ToString(row.Cells["date"].Value)?.Trim();
+            if (string.IsNullOrWhiteSpace(dateText))
+            {
+                continue;
+            }
+
+            if (!DateTime.TryParse(dateText, out var date))
+            {
+                throw new InvalidOperationException("特殊日期“" + dateText + "”无效，请使用 yyyy-MM-dd 格式。");
+            }
+
+            var baseDayText = Convert.ToString(row.Cells["baseDay"].Value)?.Trim();
+            int? baseDayIndex = null;
+            if (!string.IsNullOrWhiteSpace(baseDayText) && baseDayText != "当天")
+            {
+                var names = _weekdayInputs.Select(input => input.Text.Trim()).ToList();
+                var matchedIndex = names.FindIndex(name =>
+                    name.Equals(baseDayText, StringComparison.OrdinalIgnoreCase));
+                if (matchedIndex < 0)
+                {
+                    throw new InvalidOperationException(
+                        "特殊日期“" + date.ToString("yyyy-MM-dd")
+                        + "”的套用星期无效，请填写“当天”或当前工作日名称。");
+                }
+
+                baseDayIndex = matchedIndex;
+            }
+
+            overrides.Add(new ScheduleDateOverrideConfig
+            {
+                Date = date.Date,
+                Label = Convert.ToString(row.Cells["label"].Value)?.Trim() ?? string.Empty,
+                IsDayOff = Convert.ToBoolean(row.Cells["dayOff"].Value ?? false),
+                BaseDayIndex = baseDayIndex,
+                Cells = row.Tag is List<ScheduleCellConfig> cells
+                    ? cells.Select(ScheduleEngine.CloneCell).ToList()
+                    : []
+            });
+        }
+
+        _draft.Schedule.DateOverrides = overrides;
+    }
+
+    private void AddDateOverride()
+    {
+        var date = DateTime.Today.AddDays(1);
+        while (_draft.Schedule.DateOverrides.Any(item => item.Date.Date == date.Date))
+        {
+            date = date.AddDays(1);
+        }
+
+        var rowIndex = _dateOverridesGrid.Rows.Add(
+            date.ToString("yyyy-MM-dd"),
+            "临时安排",
+            false,
+            "当天");
+        _dateOverridesGrid.Rows[rowIndex].Tag = new List<ScheduleCellConfig>();
+    }
+
+    private void RemoveDateOverride()
+    {
+        foreach (DataGridViewRow row in _dateOverridesGrid.SelectedRows)
+        {
             if (!row.IsNewRow)
             {
-                _scheduleGrid.Rows.Remove(row);
+                _dateOverridesGrid.Rows.Remove(row);
             }
         }
     }

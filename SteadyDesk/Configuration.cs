@@ -1,10 +1,11 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace SteadyDesk;
 
 internal sealed class AppConfig
 {
-    public int SchemaVersion { get; set; } = 3;
+    public int SchemaVersion { get; set; } = 4;
     public WallpaperConfig Wallpaper { get; set; } = WallpaperConfig.CreateDefault();
     public ScheduleConfig Schedule { get; set; } = ScheduleConfig.CreateDefault();
     public List<CountdownEventConfig> Events { get; set; } = CountdownEventConfig.CreateDefault();
@@ -23,6 +24,8 @@ internal sealed class AppConfig
 
     public void Normalize()
     {
+        var sourceSchemaVersion = SchemaVersion;
+
         Wallpaper ??= WallpaperConfig.CreateDefault();
         Schedule ??= ScheduleConfig.CreateDefault();
         Events ??= [];
@@ -33,27 +36,19 @@ internal sealed class AppConfig
         Wallpaper.BackgroundPath = string.IsNullOrWhiteSpace(Wallpaper.BackgroundPath)
             ? AppStorage.DefaultBackgroundPath
             : Wallpaper.BackgroundPath;
-
         Wallpaper.ScheduleXPercent = Math.Clamp(Wallpaper.ScheduleXPercent, 3f, 25f);
         Wallpaper.CountdownXPercent = Math.Clamp(Wallpaper.CountdownXPercent, 50f, 70f);
         Wallpaper.CountdownWidthPercent = Math.Clamp(Wallpaper.CountdownWidthPercent, 25f, 44f);
 
-        if (Schedule.Weekdays == null || Schedule.Weekdays.Count != 5)
-        {
-            Schedule.Weekdays = ["周一", "周二", "周三", "周四", "周五"];
-        }
-
-        Schedule.Rows ??= [];
         Events = Events.Where(item => item is not null).ToList();
         Content.Quotes ??= [];
 
         // v2 及更早版本没有明确区分“用户清空”和“配置缺失”。
-        // 只对旧版本的空集合补回默认值；v3 允许用户保存空列表。
-        if (SchemaVersion < 3)
+        if (sourceSchemaVersion < 3)
         {
-            if (Schedule.Rows.Count == 0)
+            if (!ScheduleEngine.HasAnyScheduleData(Schedule))
             {
-                Schedule.Rows = ScheduleConfig.CreateDefault().Rows;
+                Schedule = ScheduleConfig.CreateDefault();
             }
 
             if (Events.Count == 0)
@@ -67,34 +62,21 @@ internal sealed class AppConfig
             }
         }
 
+        ScheduleEngine.Normalize(Schedule, sourceSchemaVersion);
         NormalizeLayout();
-
-        foreach (var row in Schedule.Rows)
-        {
-            row.Courses ??= [];
-            while (row.Courses.Count < 5)
-            {
-                row.Courses.Add(string.Empty);
-            }
-
-            if (row.Courses.Count > 5)
-            {
-                row.Courses = row.Courses.Take(5).ToList();
-            }
-        }
 
         foreach (var item in Events)
         {
             item.Id = string.IsNullOrWhiteSpace(item.Id)
                 ? Guid.NewGuid().ToString("N")
                 : item.Id;
-            item.Title = string.IsNullOrWhiteSpace(item.Title) ? "未命名事件" : item.Title;
-            item.Color = string.IsNullOrWhiteSpace(item.Color) ? "#B69A68" : item.Color;
+            item.Title = string.IsNullOrWhiteSpace(item.Title) ? "未命名事件" : item.Title.Trim();
+            item.Color = string.IsNullOrWhiteSpace(item.Color) ? "#B69A68" : item.Color.Trim();
             item.Date = item.Date.Date;
         }
 
         Behavior.RefreshIntervalSeconds = Math.Clamp(Behavior.RefreshIntervalSeconds, 5, 300);
-        SchemaVersion = 3;
+        SchemaVersion = 4;
     }
 
     private void NormalizeLayout()
@@ -103,7 +85,6 @@ internal sealed class AppConfig
         const float rightMargin = 3f;
         const float gap = 2f;
 
-        // 两块面板必须在同一张壁纸内完整显示，并至少保留一个小间距。
         var maxCountdownX = 100f - Wallpaper.CountdownWidthPercent - rightMargin;
         Wallpaper.CountdownXPercent = Math.Clamp(
             Wallpaper.CountdownXPercent,
@@ -146,32 +127,60 @@ internal sealed class WallpaperConfig
 internal sealed class ScheduleConfig
 {
     public List<string> Weekdays { get; set; } = ["周一", "周二", "周三", "周四", "周五"];
-    public List<ScheduleRowConfig> Rows { get; set; } = [];
+    public List<SchedulePeriodConfig> Periods { get; set; } = [];
+    public List<ScheduleDayConfig> Days { get; set; } = [];
+    public List<ScheduleDateOverrideConfig> DateOverrides { get; set; } = [];
 
-    public static ScheduleConfig CreateDefault()
-    {
-        return new ScheduleConfig
-        {
-            Rows =
-            [
-                new() { Label = "第一节课", Time = "08:00–08:40", Start = "08:00", End = "08:40", Courses = ["语文", "英语", "道法", "化学", "语文"] },
-                new() { Label = "第二节课", Time = "08:55–09:35", Start = "08:55", End = "09:35", Courses = ["语文", "英语", "数学", "语文", "语文"] },
-                new() { Label = "大课间", Time = "09:35–10:05", Start = "09:35", End = "10:05", IsBreak = true, Courses = ["做操 / 运动 / 学习"] },
-                new() { Label = "第三节课", Time = "10:05–10:45", Start = "10:05", End = "10:45", Courses = ["道法", "数学", "化学", "英语", "物理"] },
-                new() { Label = "第四节课", Time = "11:00–11:40", Start = "11:00", End = "11:40", Courses = ["英语", "体育", "体育", "英语", "物理"] },
-                new() { Label = "第五节课", Time = "11:55–12:35", Start = "11:55", End = "12:35", Courses = ["英语", "数学", "英语", "美术（单）\n音乐（双）", "生物（单）\n地理（双）"] },
-                new() { Label = "第六节课", Time = "12:40–13:20", Start = "12:40", End = "13:20", Courses = ["—", "—", "—", "—", "13:20–14:00\n体育"] },
-                new() { Label = "第七节课", Time = "13:35–14:15", Start = "13:35", End = "14:15", Courses = ["物理", "语文", "语文", "体育", "14:15–14:55\n历史"] },
-                new() { Label = "第八节课", Time = "14:30–15:10", Start = "14:30", End = "15:10", Courses = ["历史", "化学", "语文", "物理", "15:10–15:50\n数学"] },
-                new() { Label = "第九节课", Time = "15:25–16:05", Start = "15:25", End = "16:05", Courses = ["数学", "化学", "历史", "数学", "16:00–16:40\n英语"] },
-                new() { Label = "第十节课", Time = "16:15–16:55", Start = "16:15", End = "16:55", Courses = ["数学", "物理", "道法", "数学", "16:50–17:30\n班会"] },
-                new() { Label = "第十一节课", Time = "17:10–18:10\n晚托走班", Start = "17:10", End = "18:10", Courses = ["物理（单）\n数学（双）", "体活", "化学（单）\n语文（双）", "历史/道法（单）\n英语（双）", "—"] },
-                new() { Label = "延时服务", Time = "18:40–20:30", Start = "18:40", End = "20:30", Courses = ["语文", "18:30–20:30\n物理（单）\n化学（双）", "数学", "英语", "—"] }
-            ]
-        };
-    }
+    // 仅用于读取 v3 及更早版本。迁移完成后会清空且不再写入 JSON。
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ScheduleRowConfig>? Rows { get; set; }
+
+    public static ScheduleConfig CreateDefault() => ScheduleDefaults.Create();
 }
 
+internal sealed class SchedulePeriodConfig
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Label { get; set; } = string.Empty;
+    public string Start { get; set; } = string.Empty;
+    public string End { get; set; } = string.Empty;
+    public string? Note { get; set; }
+    public ScheduleCellKind Kind { get; set; } = ScheduleCellKind.Class;
+}
+
+internal sealed class ScheduleDayConfig
+{
+    public int DayIndex { get; set; }
+    public List<ScheduleCellConfig> Cells { get; set; } = [];
+}
+
+internal sealed class ScheduleCellConfig
+{
+    public string PeriodId { get; set; } = string.Empty;
+    public string Course { get; set; } = string.Empty;
+    public ScheduleCellKind Kind { get; set; } = ScheduleCellKind.Class;
+    public string? StartOverride { get; set; }
+    public string? EndOverride { get; set; }
+}
+
+internal sealed class ScheduleDateOverrideConfig
+{
+    public DateTime Date { get; set; } = DateTime.Today;
+    public string Label { get; set; } = string.Empty;
+    public bool IsDayOff { get; set; }
+    public int? BaseDayIndex { get; set; }
+    public List<ScheduleCellConfig> Cells { get; set; } = [];
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+internal enum ScheduleCellKind
+{
+    Class,
+    Break,
+    Empty
+}
+
+// v3 兼容模型。
 internal sealed class ScheduleRowConfig
 {
     public string Label { get; set; } = string.Empty;
@@ -247,19 +256,21 @@ internal sealed class BehaviorConfig
 
 internal static class ConfigStore
 {
-    public static readonly System.Text.Json.JsonSerializerOptions Options = new()
+    public static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true
     };
 
     public static string? LastRecoveryPath { get; private set; }
+    public static string? LastMigrationBackupPath { get; private set; }
 
     public static bool Exists => File.Exists(AppStorage.ConfigPath);
 
     public static AppConfig Load()
     {
         LastRecoveryPath = null;
+        LastMigrationBackupPath = null;
         AppConfig? config;
         var shouldSave = false;
 
@@ -274,7 +285,6 @@ internal static class ConfigStore
             try
             {
                 config = JsonSerializer.Deserialize<AppConfig>(json, Options);
-
                 if (config is null)
                 {
                     throw new JsonException("配置文件为空。");
@@ -286,6 +296,13 @@ internal static class ConfigStore
                 config = LoadLegacyOrDefault();
                 shouldSave = true;
             }
+        }
+
+        var sourceSchemaVersion = config.SchemaVersion;
+        if (sourceSchemaVersion < 4 && File.Exists(AppStorage.ConfigPath))
+        {
+            LastMigrationBackupPath = BackupBeforeMigration(sourceSchemaVersion);
+            shouldSave = true;
         }
 
         config.Normalize();
@@ -307,11 +324,30 @@ internal static class ConfigStore
         File.Move(temporaryPath, AppStorage.ConfigPath, true);
     }
 
+    private static string? BackupBeforeMigration(int sourceSchemaVersion)
+    {
+        try
+        {
+            var backupPath = AppStorage.ConfigPath
+                + ".v" + sourceSchemaVersion
+                + "-backup-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff")
+                + ".json";
+            File.Copy(AppStorage.ConfigPath, backupPath, false);
+            return backupPath;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string? BackupCorruptConfig()
     {
         try
         {
-            var backupPath = AppStorage.ConfigPath + ".corrupt-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json";
+            var backupPath = AppStorage.ConfigPath
+                + ".corrupt-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff")
+                + ".json";
             File.Move(AppStorage.ConfigPath, backupPath, true);
             return backupPath;
         }
