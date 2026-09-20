@@ -1,0 +1,14 @@
+# .NET build output
+**/bin/
+**/obj/
+
+# Unrelated workspace project
+/manim-vieta/
+
+# Keep the distributable executable, ignore any other packaging leftovers
+/dist/*
+!/dist/郑老师中考倒计时.exe
+
+# Keep only the latest visual handoff preview
+/output/*
+!/output/最终版-右侧字体放大.jpg
