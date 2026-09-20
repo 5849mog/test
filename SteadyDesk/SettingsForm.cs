@@ -808,6 +808,8 @@ internal sealed class SettingsForm : Form
 
     private void ImportConfig()
     {
+        string? newlyStagedBackgroundPath = null;
+
         using var dialog = new OpenFileDialog
         {
             Title = "导入稳序桌面配置",
@@ -867,14 +869,12 @@ internal sealed class SettingsForm : Form
                 }
             }
 
-            AppStorage.DeleteIfExists(_pendingBackgroundPath);
-            _pendingBackgroundPath = null;
+            var previousPendingBackgroundPath = _pendingBackgroundPath;
             if (!string.IsNullOrWhiteSpace(sourceBackground) && File.Exists(sourceBackground))
             {
-                var stagedPath = AppStorage.CreateTemporaryBackgroundPath();
-                AppStorage.ImportBackground(sourceBackground, stagedPath);
-                _pendingBackgroundPath = stagedPath;
-                imported.Wallpaper.BackgroundPath = stagedPath;
+                newlyStagedBackgroundPath = AppStorage.CreateTemporaryBackgroundPath();
+                AppStorage.ImportBackground(sourceBackground, newlyStagedBackgroundPath);
+                imported.Wallpaper.BackgroundPath = newlyStagedBackgroundPath;
             }
             else
             {
@@ -890,6 +890,8 @@ internal sealed class SettingsForm : Form
             imported.Wallpaper.OriginalWallpaperStyle = currentOriginalStyle;
             imported.Wallpaper.OriginalTileWallpaper = currentOriginalTile;
             imported.Normalize();
+            AppStorage.DeleteIfExists(previousPendingBackgroundPath);
+            _pendingBackgroundPath = newlyStagedBackgroundPath;
             _draft = imported;
             _autoStart.Checked = imported.Behavior.AutoStart;
             LoadDraftIntoControls();
@@ -900,6 +902,12 @@ internal sealed class SettingsForm : Form
         }
         catch (Exception exception)
         {
+            if (newlyStagedBackgroundPath is not null
+                && !string.Equals(newlyStagedBackgroundPath, _pendingBackgroundPath, StringComparison.OrdinalIgnoreCase))
+            {
+                AppStorage.DeleteIfExists(newlyStagedBackgroundPath);
+            }
+
             MessageBox.Show(this, exception.Message, "导入失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
