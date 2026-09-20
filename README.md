@@ -24,7 +24,7 @@
 - `SteadyDesk/ScheduleDateOverrideEditorForm.cs`：具体日期课程覆盖编辑器
 - `SteadyDesk/TrayApplicationContext.cs`：托盘、刷新和系统生命周期
 - `SteadyDesk/WindowsServices.cs`：开机启动、设置壁纸和 Wallpaper Engine 检测
-- `SteadyDesk.ScheduleChecks/`：不依赖第三方测试框架的课表边界检查
+- `SteadyDesk.ScheduleChecks/`：无第三方测试框架的最终稳定性验收程序
 - `assets/`：内置默认底图
 
 ## 运行方式
@@ -35,11 +35,13 @@
 dotnet run --project SteadyDesk/SteadyDesk.csproj
 ```
 
-运行课表行为检查：
+运行最终稳定性验收：
 
 ```powershell
 dotnet run --project SteadyDesk.ScheduleChecks/SteadyDesk.ScheduleChecks.csproj -c Release
 ```
+
+验收程序覆盖普通与特殊作息边界、具体日期优先级、旧配置迁移、JSON 往返、固定种子随机压力、多分辨率渲染、文件句柄释放和 WinForms 设置界面构造。GitHub Actions 还会发布单文件程序，并在隔离的首次运行目录中真实启动两次完成预览。
 
 生成 Windows x64 单文件程序：
 

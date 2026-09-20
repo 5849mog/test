@@ -6,6 +6,7 @@ on:
       - main
       - "feat/**"
       - "fix/**"
+      - "test/**"
   pull_request:
     branches:
       - main
@@ -13,6 +14,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -23,7 +25,7 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Verify schedule engine
+      - name: Run final stability sweep
         run: dotnet run --project SteadyDesk.ScheduleChecks/SteadyDesk.ScheduleChecks.csproj -c Release
 
       - name: Publish single-file executable
@@ -35,6 +37,47 @@ jobs:
           /p:PublishSingleFile=true
           /p:IncludeNativeLibrariesForSelfExtract=true
           -o dist
+
+      - name: Smoke-test published executable
+        shell: pwsh
+        run: |
+          $profileRoot = Join-Path $env:RUNNER_TEMP "steady-desk-smoke-profile"
+          $preview = Join-Path $env:RUNNER_TEMP "steady-desk-published-smoke.jpg"
+          $exe = Join-Path $PWD "dist/稳序桌面.exe"
+          New-Item -ItemType Directory -Force -Path $profileRoot | Out-Null
+          $env:LOCALAPPDATA = $profileRoot
+
+          function Invoke-Preview([int] $Width, [int] $Height) {
+            $arguments = @("--render-preview", $preview, $Width.ToString(), $Height.ToString())
+            $process = Start-Process -FilePath $exe -ArgumentList $arguments -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+              throw "Published executable exited with code $($process.ExitCode)."
+            }
+            if (-not (Test-Path $preview)) {
+              throw "Published executable did not create a preview."
+            }
+            if ((Get-Item $preview).Length -lt 10000) {
+              throw "Published preview is unexpectedly small."
+            }
+          }
+
+          Invoke-Preview 1280 720
+
+          $configPath = Join-Path $profileRoot "稳序桌面/settings.json"
+          if (-not (Test-Path $configPath)) {
+            throw "First-run configuration was not created."
+          }
+          $savedConfig = Get-Content -Raw -Path $configPath | ConvertFrom-Json
+          if ($savedConfig.SchemaVersion -ne 4) {
+            throw "First-run configuration schema is not v4."
+          }
+
+          Invoke-Preview 1920 1080
+
+          $bytes = [System.IO.File]::ReadAllBytes($preview)
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0xFF -or $bytes[1] -ne 0xD8) {
+            throw "Published preview is not a JPEG."
+          }
 
       - name: Upload executable artifact
         uses: actions/upload-artifact@v4
