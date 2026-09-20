@@ -36,8 +36,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         };
         _notifyIcon.DoubleClick += (_, _) => OpenSettings();
 
-        // 每 15 秒检查一次，确保跨分钟后不会因为启动时间偏移而长时间显示旧时间。
-        _timer = new System.Windows.Forms.Timer { Interval = 15_000 };
+        // 每 5 秒检查一次，减少跨分钟或跨天时的显示延迟；只有时间真正变化时才重绘壁纸。
+        _timer = new System.Windows.Forms.Timer { Interval = 5_000 };
         _timer.Tick += (_, _) => RefreshIfNeeded();
         _timer.Start();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
