@@ -1002,6 +1002,91 @@ internal sealed class SettingsForm : Form
         return new TabPage(text) { BackColor = Paper, Padding = new Padding(10) };
     }
 
+    private static DataGridView CreateGrid()
+    {
+        var grid = new DataGridView
+        {
+            Dock = DockStyle.Fill,
+            BackgroundColor = PaperBright,
+            BorderStyle = BorderStyle.FixedSingle,
+            AllowUserToAddRows = true,
+            AllowUserToDeleteRows = true,
+            AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
+            RowHeadersVisible = false,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            MultiSelect = true,
+            EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2
+        };
+        grid.DataError += (_, eventArgs) =>
+        {
+            eventArgs.ThrowException = false;
+        };
+        return grid;
+    }
+
+    private static Label SectionTitle(string text)
+    {
+        return new Label
+        {
+            Text = text,
+            AutoSize = true,
+            Font = new Font("Microsoft YaHei", 12f, FontStyle.Bold),
+            ForeColor = Wine,
+            Margin = new Padding(3, 12, 3, 6)
+        };
+    }
+
+    private static Label MutedLabel(string text, int width, int height)
+    {
+        return new Label
+        {
+            Text = text,
+            Width = width,
+            Height = height,
+            ForeColor = Muted,
+            Margin = new Padding(3, 3, 3, 10)
+        };
+    }
+
+    private static Button MakeButton(string text, bool primary)
+    {
+        var button = new Button
+        {
+            Text = text,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = primary ? Wine : PaperBright,
+            ForeColor = primary ? PaperBright : Ink,
+            Font = new Font("Microsoft YaHei", 9.5f, primary ? FontStyle.Bold : FontStyle.Regular),
+            Margin = new Padding(4),
+            Padding = new Padding(12, 5, 12, 5),
+            UseVisualStyleBackColor = false
+        };
+        button.FlatAppearance.BorderColor = primary ? Wine : Gold;
+        button.FlatAppearance.BorderSize = primary ? 2 : 1;
+        button.FlatAppearance.MouseOverBackColor = primary
+            ? Color.FromArgb(132, 40, 55)
+            : Color.FromArgb(250, 239, 216);
+        return button;
+    }
+
+    private static void AddRow(TableLayoutPanel panel, string label, Control control)
+    {
+        var row = panel.RowCount;
+        panel.RowCount++;
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var title = new Label
+        {
+            Text = label,
+            AutoSize = true,
+            ForeColor = Muted,
+            Margin = new Padding(4, 9, 12, 8)
+        };
+        control.Margin = new Padding(4, 5, 4, 5);
+        panel.Controls.Add(title, 0, row);
+        panel.Controls.Add(control, 1, row);
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
