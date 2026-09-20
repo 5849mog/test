@@ -10,6 +10,8 @@ internal sealed class SettingsForm : Form
     private static readonly Color Ink = Color.FromArgb(39, 31, 27);
     private static readonly Color Muted = Color.FromArgb(105, 88, 77);
     private static readonly Color Gold = Color.FromArgb(186, 151, 91);
+    private static readonly Color Line = Color.FromArgb(226, 216, 202);
+    private static readonly Color PaperInset = Color.FromArgb(242, 234, 221);
 
     private AppConfig _draft;
     private readonly PictureBox _preview;
@@ -116,13 +118,32 @@ internal sealed class SettingsForm : Form
         _showProgress = new CheckBox { Text = "显示进度条", AutoSize = true };
         _showQuote = new CheckBox { Text = "显示激励语", AutoSize = true };
         _autoStart = new CheckBox { Text = "开机自动启动", AutoSize = true, Checked = autoStartEnabled };
-        _backgroundLabel = new Label { AutoSize = false, AutoEllipsis = true, Width = 290, Height = 28, ForeColor = Wine };
-        _statusLabel = new Label { AutoSize = false, Dock = DockStyle.Fill, ForeColor = Muted, TextAlign = ContentAlignment.MiddleLeft };
+        _backgroundLabel = new Label
+        {
+            AutoSize = false,
+            AutoEllipsis = true,
+            Width = 290,
+            Height = 30,
+            ForeColor = Wine,
+            BackColor = PaperInset,
+            BorderStyle = BorderStyle.FixedSingle,
+            Padding = new Padding(7, 5, 7, 4)
+        };
+        _statusLabel = new Label
+        {
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            ForeColor = Muted,
+            BackColor = PaperBright,
+            Padding = new Padding(9, 0, 9, 0),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
 
         _eventsGrid = CreateGrid();
         _scheduleGrid = CreateGrid();
 
         BuildUi();
+        ApplyControlTheme(this);
         LoadDraftIntoControls();
         Shown += (_, _) => RefreshPreview();
     }
@@ -141,7 +162,20 @@ internal sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
 
-        var header = new Panel { Dock = DockStyle.Fill };
+        var header = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = PaperBright,
+            Padding = new Padding(0, 0, 0, 4)
+        };
+        header.Paint += (_, eventArgs) =>
+        {
+            using var hairline = new Pen(Color.FromArgb(86, Line), 1f);
+            using var accent = new SolidBrush(Color.FromArgb(185, Wine));
+            eventArgs.Graphics.DrawLine(hairline, 0, header.Height - 1, header.Width, header.Height - 1);
+            eventArgs.Graphics.FillRectangle(accent, 0, header.Height - 2, 96, 2);
+        };
+
         var eyebrow = new Label
         {
             Text = "STEADY DESK / CONTROL CENTER",
@@ -166,7 +200,16 @@ internal sealed class SettingsForm : Form
         };
         header.Controls.AddRange([eyebrow, title, subtitle]);
 
-        var tabs = new TabControl { Dock = DockStyle.Fill, Padding = new Point(18, 8) };
+        var tabs = new TabControl
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Point(18, 8),
+            DrawMode = TabDrawMode.OwnerDrawFixed,
+            ItemSize = new Size(116, 34),
+            SizeMode = TabSizeMode.Fixed,
+            BackColor = Paper
+        };
+        tabs.DrawItem += DrawTab;
         tabs.TabPages.Add(BuildOverviewPage());
         tabs.TabPages.Add(BuildEventsPage());
         tabs.TabPages.Add(BuildSchedulePage());
@@ -174,7 +217,13 @@ internal sealed class SettingsForm : Form
         tabs.TabPages.Add(BuildContentPage());
         tabs.TabPages.Add(BuildSystemPage());
 
-        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
+        var footer = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            BackColor = PaperBright,
+            Padding = new Padding(0, 5, 0, 0)
+        };
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
@@ -217,7 +266,7 @@ internal sealed class SettingsForm : Form
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
             AutoScroll = true,
-            Padding = new Padding(8),
+            Padding = new Padding(14),
             BackColor = PaperBright
         };
         side.Controls.Add(SectionTitle("实时预览"));
@@ -1007,7 +1056,80 @@ internal sealed class SettingsForm : Form
 
     private static TabPage CreatePage(string text)
     {
-        return new TabPage(text) { BackColor = Paper, Padding = new Padding(10) };
+        return new TabPage(text)
+        {
+            BackColor = Paper,
+            Padding = new Padding(12)
+        };
+    }
+
+    private static void DrawTab(object? sender, DrawItemEventArgs eventArgs)
+    {
+        if (sender is not TabControl tabs
+            || eventArgs.Index < 0
+            || eventArgs.Index >= tabs.TabPages.Count)
+        {
+            return;
+        }
+
+        var selected = eventArgs.Index == tabs.SelectedIndex;
+        var bounds = eventArgs.Bounds;
+        using var fill = new SolidBrush(selected ? PaperBright : Paper);
+        using var hairline = new Pen(selected ? Color.FromArgb(90, Line) : Color.FromArgb(36, Line), 1f);
+        using var accent = new SolidBrush(Color.FromArgb(190, Wine));
+
+        eventArgs.Graphics.FillRectangle(fill, bounds);
+        eventArgs.Graphics.DrawLine(hairline, bounds.Left + 8, bounds.Bottom - 1, bounds.Right - 8, bounds.Bottom - 1);
+        if (selected)
+        {
+            eventArgs.Graphics.FillRectangle(accent, bounds.Left + 18, bounds.Bottom - 3, bounds.Width - 36, 2);
+        }
+
+        TextRenderer.DrawText(
+            eventArgs.Graphics,
+            tabs.TabPages[eventArgs.Index].Text,
+            tabs.Font,
+            bounds,
+            selected ? Wine : Muted,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+    }
+
+    private static void ApplyControlTheme(Control control)
+    {
+        switch (control)
+        {
+            case TextBox textBox:
+                textBox.BackColor = PaperBright;
+                textBox.ForeColor = Ink;
+                textBox.BorderStyle = BorderStyle.FixedSingle;
+                textBox.Padding = new Padding(6, 3, 6, 3);
+                break;
+            case DateTimePicker datePicker:
+                datePicker.BackColor = PaperBright;
+                datePicker.ForeColor = Ink;
+                datePicker.CalendarMonthBackground = PaperBright;
+                datePicker.CalendarForeColor = Ink;
+                datePicker.CalendarTitleBackColor = Wine;
+                datePicker.CalendarTitleForeColor = PaperBright;
+                break;
+            case NumericUpDown numeric:
+                numeric.BackColor = PaperBright;
+                numeric.ForeColor = Ink;
+                numeric.BorderStyle = BorderStyle.FixedSingle;
+                break;
+            case TrackBar trackBar:
+                trackBar.BackColor = PaperBright;
+                break;
+            case CheckBox checkBox:
+                checkBox.BackColor = Color.Transparent;
+                checkBox.ForeColor = Ink;
+                break;
+        }
+
+        foreach (Control child in control.Controls)
+        {
+            ApplyControlTheme(child);
+        }
     }
 
     private static DataGridView CreateGrid()
@@ -1017,14 +1139,42 @@ internal sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             BackgroundColor = PaperBright,
             BorderStyle = BorderStyle.FixedSingle,
+            GridColor = Line,
             AllowUserToAddRows = true,
             AllowUserToDeleteRows = true,
+            AllowUserToResizeRows = false,
             AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
+            ColumnHeadersHeight = 34,
+            ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
             RowHeadersVisible = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             MultiSelect = true,
-            EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2
+            EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2,
+            CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
+            EnableHeadersVisualStyles = false,
+            ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = PaperInset,
+                ForeColor = Wine,
+                Font = new Font("Microsoft YaHei", 9f, FontStyle.Bold),
+                Alignment = DataGridViewContentAlignment.MiddleLeft,
+                Padding = new Padding(6, 0, 6, 0)
+            },
+            DefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = PaperBright,
+                ForeColor = Ink,
+                SelectionBackColor = Color.FromArgb(232, 220, 201),
+                SelectionForeColor = Ink,
+                Font = new Font("Microsoft YaHei", 9.2f),
+                Padding = new Padding(6, 3, 6, 3)
+            },
+            AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.FromArgb(252, 248, 240)
+            }
         };
+        grid.RowTemplate.Height = 30;
         grid.DataError += (_, eventArgs) =>
         {
             eventArgs.ThrowException = false;
@@ -1034,14 +1184,23 @@ internal sealed class SettingsForm : Form
 
     private static Label SectionTitle(string text)
     {
-        return new Label
+        var label = new Label
         {
             Text = text,
             AutoSize = true,
-            Font = new Font("Microsoft YaHei", 12f, FontStyle.Bold),
+            Font = new Font("Microsoft YaHei", 11.5f, FontStyle.Bold),
             ForeColor = Wine,
+            Padding = new Padding(10, 0, 0, 0),
             Margin = new Padding(3, 12, 3, 6)
         };
+        label.Paint += (_, eventArgs) =>
+        {
+            using var accent = new SolidBrush(Color.FromArgb(170, Gold));
+            using var line = new Pen(Color.FromArgb(42, Line), 1f);
+            eventArgs.Graphics.FillRectangle(accent, 0, 4, 3, Math.Max(8, label.Height - 8));
+            eventArgs.Graphics.DrawLine(line, 10, label.Height - 1, label.Width, label.Height - 1);
+        };
+        return label;
     }
 
     private static Label MutedLabel(string text, int width, int height)
@@ -1052,6 +1211,7 @@ internal sealed class SettingsForm : Form
             Width = width,
             Height = height,
             ForeColor = Muted,
+            Font = new Font("Microsoft YaHei", 9.2f),
             Margin = new Padding(3, 3, 3, 10)
         };
     }
@@ -1068,13 +1228,17 @@ internal sealed class SettingsForm : Form
             Font = new Font("Microsoft YaHei", 9.5f, primary ? FontStyle.Bold : FontStyle.Regular),
             Margin = new Padding(4),
             Padding = new Padding(12, 5, 12, 5),
+            Cursor = Cursors.Hand,
             UseVisualStyleBackColor = false
         };
         button.FlatAppearance.BorderColor = primary ? Wine : Gold;
         button.FlatAppearance.BorderSize = primary ? 2 : 1;
         button.FlatAppearance.MouseOverBackColor = primary
-            ? Color.FromArgb(132, 40, 55)
-            : Color.FromArgb(250, 239, 216);
+            ? Color.FromArgb(118, 36, 47)
+            : Color.FromArgb(247, 241, 232);
+        button.FlatAppearance.MouseDownBackColor = primary
+            ? Color.FromArgb(92, 27, 35)
+            : Color.FromArgb(238, 226, 207);
         return button;
     }
 
@@ -1087,6 +1251,7 @@ internal sealed class SettingsForm : Form
         {
             Text = label,
             AutoSize = true,
+            Font = new Font("Microsoft YaHei", 9.2f),
             ForeColor = Muted,
             Margin = new Padding(4, 9, 12, 8)
         };
