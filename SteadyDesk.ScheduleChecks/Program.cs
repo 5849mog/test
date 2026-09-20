@@ -1,9 +1,11 @@
 using SteadyDesk;
 
 var failures = new List<string>();
+var checksRun = 0;
 
 void Check(string name, bool condition)
 {
+    checksRun++;
     if (!condition)
     {
         failures.Add(name);
@@ -96,5 +98,5 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("Schedule engine checks passed: 16");
+Console.WriteLine($"Schedule engine checks passed: {checksRun}");
 return 0;

@@ -1006,19 +1006,29 @@ internal sealed class SettingsForm : Form
             return;
         }
 
+        var gridCell = row.Cells[eventArgs.ColumnIndex];
+        gridCell.ToolTipText = string.Empty;
         if (cell.Kind == ScheduleCellKind.Empty || string.IsNullOrWhiteSpace(rawCourse))
         {
             eventArgs.Value = "—";
-            eventArgs.CellStyle.ForeColor = Muted;
+            if (eventArgs.CellStyle is { } emptyStyle)
+            {
+                emptyStyle.ForeColor = Muted;
+            }
         }
         else
         {
+            if (eventArgs.CellStyle is { } filledStyle)
+            {
+                filledStyle.ForeColor = Ink;
+            }
+
             var hasOverride = !string.IsNullOrWhiteSpace(cell.StartOverride)
                 && !string.IsNullOrWhiteSpace(cell.EndOverride);
             eventArgs.Value = rawCourse + (hasOverride ? "  ⏱" : string.Empty);
             if (hasOverride)
             {
-                row.Cells[eventArgs.ColumnIndex].ToolTipText =
+                gridCell.ToolTipText =
                     "特殊时间 " + cell.StartOverride + "–" + cell.EndOverride;
             }
         }

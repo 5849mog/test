@@ -381,9 +381,9 @@ internal static class ScheduleEngine
         out TimeOnly start,
         out TimeOnly end)
     {
-        return TryParseTime(startText, out start)
-            && TryParseTime(endText, out end)
-            && end > start;
+        var hasStart = TryParseTime(startText, out start);
+        var hasEnd = TryParseTime(endText, out end);
+        return hasStart && hasEnd && end > start;
     }
 
     public static int GetWeekdayIndex(DateTime date)
@@ -424,9 +424,11 @@ internal static class ScheduleEngine
                     Kind = ScheduleCellKind.Empty
                 };
 
+            var overrideStart = default(TimeOnly);
+            var overrideEnd = default(TimeOnly);
             var usesTimeOverride = !string.IsNullOrWhiteSpace(cell.StartOverride)
                 && !string.IsNullOrWhiteSpace(cell.EndOverride)
-                && TryParseTimeRange(cell.StartOverride, cell.EndOverride, out var overrideStart, out var overrideEnd);
+                && TryParseTimeRange(cell.StartOverride, cell.EndOverride, out overrideStart, out overrideEnd);
             var hasDefaultTime = TryParseTimeRange(period.Start, period.End, out var defaultStart, out var defaultEnd);
 
             entries.Add(new ResolvedScheduleEntry(
