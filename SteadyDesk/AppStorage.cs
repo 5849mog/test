@@ -3,6 +3,11 @@ using Microsoft.Win32;
 
 namespace SteadyDesk;
 
+internal sealed record OriginalWallpaperSnapshot(
+    string? Path,
+    string? Style,
+    string? TileWallpaper);
+
 internal static class AppStorage
 {
     private const string EmbeddedBackgroundName = "SteadyDesk.Assets.wallpaper-background-v1.png";
@@ -16,6 +21,7 @@ internal static class AppStorage
     public static string RenderedWallpaperPath => Path.Combine(RootDirectory, "当前壁纸.jpg");
     public static string PreviewWallpaperPath => Path.Combine(RootDirectory, "预览壁纸.jpg");
     public static string OriginalWallpaperPath => Path.Combine(RootDirectory, "原壁纸.png");
+    public static string CustomBackgroundPath => Path.Combine(RootDirectory, "自定义背景.png");
 
     public static void EnsureInitialized()
     {
@@ -23,10 +29,17 @@ internal static class AppStorage
         ExtractDefaultBackground();
     }
 
-    public static string ImportBackground(string sourcePath)
+    public static string CreateTemporaryBackgroundPath()
     {
-        var destination = Path.Combine(RootDirectory, "自定义背景.png");
-        if (Path.GetFullPath(sourcePath).Equals(Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
+        Directory.CreateDirectory(RootDirectory);
+        return Path.Combine(RootDirectory, ".pending-background-" + Guid.NewGuid().ToString("N") + ".png");
+    }
+
+    public static string ImportBackground(string sourcePath, string? destinationPath = null)
+    {
+        sourcePath = Path.GetFullPath(sourcePath);
+        var destination = Path.GetFullPath(destinationPath ?? CustomBackgroundPath);
+        if (sourcePath.Equals(destination, StringComparison.OrdinalIgnoreCase))
         {
             return destination;
         }
@@ -37,30 +50,65 @@ internal static class AppStorage
             throw new InvalidOperationException("请选择至少 640×360 的图片。建议使用 16:9 横向图片。");
         }
 
-        using var copy = new Bitmap(image);
-        copy.Save(destination, System.Drawing.Imaging.ImageFormat.Png);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination) ?? RootDirectory);
+        var temporaryPath = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using var copy = new Bitmap(image);
+            copy.Save(temporaryPath, System.Drawing.Imaging.ImageFormat.Png);
+            File.Move(temporaryPath, destination, true);
+            return destination;
+        }
+        finally
+        {
+            DeleteIfExists(temporaryPath);
+        }
+    }
+
+    public static string CommitBackground(string stagedPath)
+    {
+        var destination = CustomBackgroundPath;
+        if (string.IsNullOrWhiteSpace(stagedPath)
+            || !File.Exists(stagedPath)
+            || stagedPath.Equals(destination, StringComparison.OrdinalIgnoreCase))
+        {
+            return stagedPath;
+        }
+
+        File.Move(stagedPath, destination, true);
         return destination;
     }
 
-    public static string? CaptureOriginalWallpaper()
+    public static OriginalWallpaperSnapshot CaptureOriginalWallpaper()
     {
         try
         {
             using var desktopKey = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop");
             var currentPath = desktopKey?.GetValue("WallPaper") as string;
+            var style = desktopKey?.GetValue("WallpaperStyle") as string;
+            var tileWallpaper = desktopKey?.GetValue("TileWallpaper") as string;
+
             if (string.IsNullOrWhiteSpace(currentPath) || !File.Exists(currentPath))
             {
-                return currentPath;
+                return new OriginalWallpaperSnapshot(currentPath, style, tileWallpaper);
             }
 
             using var image = Image.FromFile(currentPath);
             using var copy = new Bitmap(image);
             copy.Save(OriginalWallpaperPath, System.Drawing.Imaging.ImageFormat.Png);
-            return OriginalWallpaperPath;
+            return new OriginalWallpaperSnapshot(OriginalWallpaperPath, style, tileWallpaper);
         }
         catch
         {
-            return null;
+            return new OriginalWallpaperSnapshot(null, null, null);
+        }
+    }
+
+    public static void DeleteIfExists(string? path)
+    {
+        if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+        {
+            File.Delete(path);
         }
     }
 
