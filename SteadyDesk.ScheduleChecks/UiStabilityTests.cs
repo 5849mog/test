@@ -33,8 +33,8 @@ internal static class UiStabilityTests
         runner.Check("设置中心至少七个功能页", tabs.Sum(tab => tab.TabPages.Count) >= 7);
         runner.Check("设置中心包含事件、周课表和特殊日期表格", grids.Count >= 3);
         runner.Check("设置中心保留导入入口", buttons.Contains("导入配置"));
-        runner.Check("设置中心保留导出入口", buttons.Contains("导出配置"));
-        runner.Check("设置中心保留恢复默认入口", buttons.Contains("恢复默认"));
+        runner.Check("设置中心保留导出入口", buttons.Contains("导出全部配置"));
+        runner.Check("设置中心保留恢复默认入口", buttons.Contains("恢复全部默认设置"));
     }
 
     private static void VerifyScheduleEditors(StabilityTestRunner runner)

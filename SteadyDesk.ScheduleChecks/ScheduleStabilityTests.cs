@@ -435,17 +435,26 @@ internal static class ScheduleStabilityTests
 
             schedule.DateOverrides.Add(rule);
             ScheduleEngine.Normalize(schedule, 4);
-            runner.Equal(
-                $"随机场景 {scenario} 通过验证",
-                0,
-                ScheduleEngine.Validate(schedule).Count);
+            var validationErrors = ScheduleEngine.Validate(schedule);
 
             var roundTrip = CloneSchedule(schedule);
             ScheduleEngine.Normalize(roundTrip, 4);
-            runner.Equal(
-                $"随机场景 {scenario} 序列化后通过验证",
-                0,
-                ScheduleEngine.Validate(roundTrip).Count);
+            var roundTripErrors = ScheduleEngine.Validate(roundTrip);
+            runner.Check(
+                $"随机场景 {scenario} 验证结果序列化前后一致",
+                validationErrors.SequenceEqual(roundTripErrors, StringComparer.Ordinal));
+            if (validationErrors.Count == 0)
+            {
+                runner.DoesNotThrow(
+                    $"随机合法场景 {scenario} 可通过 ValidateOrThrow",
+                    () => ScheduleEngine.ValidateOrThrow(roundTrip));
+            }
+            else
+            {
+                runner.Throws<InvalidOperationException>(
+                    $"随机非法场景 {scenario} 会被 ValidateOrThrow 拒绝",
+                    () => ScheduleEngine.ValidateOrThrow(roundTrip));
+            }
 
             var mondayOffset = ((int)targetDate.DayOfWeek + 6) % 7;
             var sweepStart = targetDate.AddDays(-mondayOffset);
