@@ -11,15 +11,27 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private DateTime _lastRefreshDay;
     private DateTime _lastRenderedMinute;
     private Size _lastScreenSize;
+    private DateTime _nextRetryAt = DateTime.MinValue;
+    private DateTime _lastErrorShownAt = DateTime.MinValue;
+    private string? _lastErrorMessage;
     private bool _refreshing;
 
     public TrayApplicationContext(AppConfig config, bool firstRun, bool startedAutomatically, bool openSettings = false)
     {
         _config = config;
+
         if (firstRun)
         {
-            _config.Wallpaper.OriginalWallpaperPath = AppStorage.CaptureOriginalWallpaper();
+            if (string.IsNullOrWhiteSpace(_config.Wallpaper.OriginalWallpaperPath))
+            {
+                var snapshot = AppStorage.CaptureOriginalWallpaper();
+                _config.Wallpaper.OriginalWallpaperPath = snapshot.Path;
+                _config.Wallpaper.OriginalWallpaperStyle = snapshot.Style;
+                _config.Wallpaper.OriginalTileWallpaper = snapshot.TileWallpaper;
+            }
+
             _config.Behavior.AutoStart = true;
+            AutoStartManager.RemoveLegacyEntries();
             AutoStartManager.SetEnabled(true);
             ConfigStore.Save(_config);
         }
@@ -97,6 +109,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             AutoStartManager.SetEnabled(dialog.AutoStartEnabled);
             _config.Behavior.AutoStart = dialog.AutoStartEnabled;
             ConfigStore.Save(_config);
+            _timer.Interval = Math.Clamp(_config.Behavior.RefreshIntervalSeconds * 1000, 5000, 300000);
             RefreshWallpaper(true);
         }
         catch (Exception exception)
@@ -112,16 +125,27 @@ internal sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
+        if (!showConfirmation && DateTime.Now < _nextRetryAt)
+        {
+            return;
+        }
+
         _refreshing = true;
         try
         {
-            var bounds = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
+            var bounds = GetDesktopBounds();
             var now = DateTime.Now;
             WallpaperRenderer.Render(_config, AppStorage.RenderedWallpaperPath, bounds.Width, bounds.Height, now);
-            WallpaperManager.Apply(AppStorage.RenderedWallpaperPath);
+
+            var style = Screen.AllScreens.Length > 1 ? "22" : "10";
+            WallpaperManager.Apply(AppStorage.RenderedWallpaperPath, style, "0");
+
             _lastRefreshDay = now.Date;
             _lastRenderedMinute = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0);
             _lastScreenSize = bounds.Size;
+            _nextRetryAt = DateTime.MinValue;
+            _lastErrorMessage = null;
+
             ConfigStore.Save(_config);
 
             if (showConfirmation)
@@ -135,7 +159,22 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         catch (Exception exception)
         {
-            MessageBox.Show(exception.Message, "壁纸刷新失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            var message = exception.Message;
+            _nextRetryAt = DateTime.Now.AddSeconds(30);
+            var shouldShow = showConfirmation
+                || !string.Equals(_lastErrorMessage, message, StringComparison.Ordinal)
+                || DateTime.Now - _lastErrorShownAt > TimeSpan.FromMinutes(5);
+
+            _lastErrorMessage = message;
+            if (shouldShow)
+            {
+                _lastErrorShownAt = DateTime.Now;
+                MessageBox.Show(
+                    message + "\n\n程序将在稍后自动重试。",
+                    "壁纸刷新失败",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
         finally
         {
@@ -147,7 +186,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         var now = DateTime.Now;
         var currentMinute = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0);
-        var bounds = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
+        var bounds = GetDesktopBounds();
         if (_lastRefreshDay != now.Date || _lastRenderedMinute != currentMinute || _lastScreenSize != bounds.Size)
         {
             RefreshWallpaper(false);
@@ -157,6 +196,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
     {
         RefreshWallpaper(false);
+    }
+
+    private static Rectangle GetDesktopBounds()
+    {
+        var bounds = SystemInformation.VirtualScreen;
+        return bounds.Width > 0 && bounds.Height > 0
+            ? bounds
+            : new Rectangle(0, 0, 1920, 1080);
     }
 
     private static void ShowManualStartMessage(bool firstRun)
@@ -174,7 +221,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
 
         var firstRunText = firstRun ? "已保存原壁纸，并启用开机自动启动。\n\n" : string.Empty;
+        var recoveryText = ConfigStore.LastRecoveryPath is null
+            ? string.Empty
+            : "检测到配置文件损坏，已备份到：\n" + ConfigStore.LastRecoveryPath + "\n\n";
+
         MessageBox.Show(
+            recoveryText +
             firstRunText +
             "稳序桌面已经设置成功，程序会留在任务栏右下角运行。\n\n" +
             "右键图标即可打开控制中心。",
@@ -185,14 +237,26 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void DisableAndRestore()
     {
+        var originalPath = _config.Wallpaper.OriginalWallpaperPath;
+        if (string.IsNullOrWhiteSpace(originalPath) || !File.Exists(originalPath))
+        {
+            MessageBox.Show(
+                "没有找到可恢复的原壁纸备份。当前程序仍会继续运行，避免误退出后无法恢复。",
+                "无法恢复原壁纸",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
         try
         {
+            WallpaperManager.Apply(
+                originalPath,
+                _config.Wallpaper.OriginalWallpaperStyle ?? "10",
+                _config.Wallpaper.OriginalTileWallpaper ?? "0");
             AutoStartManager.SetEnabled(false);
-            if (!string.IsNullOrWhiteSpace(_config.Wallpaper.OriginalWallpaperPath)
-                && File.Exists(_config.Wallpaper.OriginalWallpaperPath))
-            {
-                WallpaperManager.Apply(_config.Wallpaper.OriginalWallpaperPath);
-            }
+            _config.Behavior.AutoStart = false;
+            ConfigStore.Save(_config);
         }
         catch (Exception exception)
         {
@@ -215,6 +279,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         if (disposing)
         {
+            _timer.Stop();
+            SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             _timer.Dispose();
             _notifyIcon.Dispose();
         }
