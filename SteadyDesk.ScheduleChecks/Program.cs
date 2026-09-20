@@ -25,6 +25,7 @@ var saturday = new DateTime(2026, 9, 26);
 var defaults = ScheduleConfig.CreateDefault();
 Check("周一第一节", ActiveAt(defaults, monday.AddHours(8).AddMinutes(20))?.Course == "语文");
 Check("周一第六节为空课", ActiveAt(defaults, monday.AddHours(12).AddMinutes(50)) is null);
+Check("星期五特殊节次前保持空档", ActiveAt(defaults, friday.AddHours(12).AddMinutes(50)) is null);
 Check("星期五体育使用特殊时间", ActiveAt(defaults, friday.AddHours(13).AddMinutes(30))?.Course == "体育");
 Check("星期五体育开始边界", ActiveAt(defaults, friday.AddHours(13).AddMinutes(20))?.Course == "体育");
 Check("星期五体育结束边界", ActiveAt(defaults, friday.AddHours(14)) is null);
@@ -76,6 +77,25 @@ ScheduleEngine.Normalize(dateCellOverride, 4);
 Check(
     "具体日期课程覆盖基础模板",
     ActiveAt(dateCellOverride, friday.AddHours(13).AddMinutes(30))?.Course == "临时数学");
+
+var dateEmptyOverride = ScheduleConfig.CreateDefault();
+dateEmptyOverride.DateOverrides.Add(new ScheduleDateOverrideConfig
+{
+    Date = friday,
+    BaseDayIndex = 4,
+    Cells =
+    [
+        new ScheduleCellConfig
+        {
+            PeriodId = "period-06",
+            Kind = ScheduleCellKind.Empty
+        }
+    ]
+});
+ScheduleEngine.Normalize(dateEmptyOverride, 4);
+Check(
+    "具体日期空课覆盖基础模板",
+    ActiveAt(dateEmptyOverride, friday.AddHours(13).AddMinutes(30)) is null);
 
 var legacy = new ScheduleConfig
 {

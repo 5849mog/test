@@ -26,12 +26,20 @@ internal sealed class ScheduleCellEditorForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
-        ClientSize = new Size(430, 300);
+        ClientSize = new Size(430, 340);
         BackColor = Color.FromArgb(246, 239, 228);
         ForeColor = Color.FromArgb(39, 31, 27);
         Font = new Font("Microsoft YaHei", 10f);
 
-        _course = new TextBox { Width = 250, Text = source.Course };
+        _course = new TextBox
+        {
+            Width = 250,
+            Height = 64,
+            Multiline = true,
+            AcceptsReturn = true,
+            ScrollBars = ScrollBars.Vertical,
+            Text = source.Course
+        };
         _kind = new ComboBox
         {
             Width = 160,

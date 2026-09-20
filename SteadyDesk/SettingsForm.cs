@@ -152,6 +152,32 @@ internal sealed class SettingsForm : Form
             }
         };
         _scheduleGrid.CellFormatting += FormatScheduleCell;
+        _scheduleGrid.CurrentCellDirtyStateChanged += (_, _) =>
+        {
+            if (_scheduleGrid.IsCurrentCellDirty
+                && _scheduleGrid.CurrentCell is DataGridViewCheckBoxCell)
+            {
+                _scheduleGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            }
+        };
+        _scheduleGrid.CellValueChanged += (_, eventArgs) =>
+        {
+            if (eventArgs.RowIndex >= 0
+                && eventArgs.ColumnIndex >= 0
+                && _scheduleGrid.Columns[eventArgs.ColumnIndex].Name == "break")
+            {
+                SyncScheduleRowKind(eventArgs.RowIndex);
+            }
+        };
+        _dateOverridesGrid.CellEndEdit += (_, eventArgs) =>
+        {
+            if (eventArgs.RowIndex >= 0
+                && eventArgs.ColumnIndex >= 0
+                && _dateOverridesGrid.Columns[eventArgs.ColumnIndex].Name == "baseDay")
+            {
+                _dateOverridesGrid.Rows[eventArgs.RowIndex].Cells[eventArgs.ColumnIndex].Tag = null;
+            }
+        };
 
         BuildUi();
         ApplyControlTheme(this);
@@ -695,9 +721,11 @@ internal sealed class SettingsForm : Form
                 item.IsDayOff,
                 baseDay,
                 item.Cells.Count + " 项");
-            _dateOverridesGrid.Rows[rowIndex].Tag = item.Cells
+            var row = _dateOverridesGrid.Rows[rowIndex];
+            row.Tag = item.Cells
                 .Select(ScheduleEngine.CloneCell)
                 .ToList();
+            row.Cells["baseDay"].Tag = item.BaseDayIndex;
         }
     }
 
@@ -720,6 +748,11 @@ internal sealed class SettingsForm : Form
         if (_draft.Schedule.Weekdays.Any(string.IsNullOrWhiteSpace))
         {
             throw new InvalidOperationException("工作日名称不能为空。");
+        }
+
+        if (_draft.Schedule.Weekdays.Distinct(StringComparer.OrdinalIgnoreCase).Count() != 5)
+        {
+            throw new InvalidOperationException("五个工作日名称不能重复。");
         }
 
         _draft.Theme.Wine = ReadColor(_themeInputs[nameof(ThemeConfig.Wine)], "Wine");
@@ -916,6 +949,32 @@ internal sealed class SettingsForm : Form
             }
 
             _scheduleGrid.Rows.Remove(row);
+        }
+    }
+
+    private void SyncScheduleRowKind(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= _scheduleGrid.Rows.Count)
+        {
+            return;
+        }
+
+        var row = _scheduleGrid.Rows[rowIndex];
+        if (row.Tag is not string periodId)
+        {
+            return;
+        }
+
+        var targetKind = Convert.ToBoolean(row.Cells["break"].Value ?? false)
+            ? ScheduleCellKind.Break
+            : ScheduleCellKind.Class;
+        for (var dayIndex = 0; dayIndex < 5; dayIndex++)
+        {
+            if (_scheduleCellDrafts.TryGetValue((periodId, dayIndex), out var cell)
+                && cell.Kind != ScheduleCellKind.Empty)
+            {
+                cell.Kind = targetKind;
+            }
         }
     }
 
@@ -1130,11 +1189,13 @@ internal sealed class SettingsForm : Form
                     cell.StartOverride = null;
                     cell.EndOverride = null;
                 }
-                else
+                else if (period.Kind == ScheduleCellKind.Break)
                 {
-                    cell.Kind = period.Kind == ScheduleCellKind.Break
-                        ? ScheduleCellKind.Break
-                        : ScheduleCellKind.Class;
+                    cell.Kind = ScheduleCellKind.Break;
+                }
+                else if (cell.Kind == ScheduleCellKind.Empty)
+                {
+                    cell.Kind = ScheduleCellKind.Class;
                 }
 
                 days[dayIndex].Cells.Add(cell);
@@ -1219,6 +1280,11 @@ internal sealed class SettingsForm : Form
                 throw new InvalidOperationException("工作日名称不能为空。");
             }
 
+            if (weekdayNames.Distinct(StringComparer.OrdinalIgnoreCase).Count() != 5)
+            {
+                throw new InvalidOperationException("五个工作日名称不能重复。");
+            }
+
             _draft.Schedule.Weekdays = weekdayNames;
             ReadScheduleIntoDraft();
             var baseDayIndex = ReadBaseDayIndex(row, date);
@@ -1250,15 +1316,28 @@ internal sealed class SettingsForm : Form
 
     private int? ReadBaseDayIndex(DataGridViewRow row, DateTime date)
     {
-        var baseDayText = Convert.ToString(row.Cells["baseDay"].Value)?.Trim();
+        var baseDayCell = row.Cells["baseDay"];
+        var baseDayText = Convert.ToString(baseDayCell.Value)?.Trim();
         if (string.IsNullOrWhiteSpace(baseDayText) || baseDayText == "当天")
         {
             return null;
         }
 
+        if (baseDayCell.Tag is int storedIndex && storedIndex is >= 0 and < 5)
+        {
+            return storedIndex;
+        }
+
         var names = _weekdayInputs.Select(input => input.Text.Trim()).ToList();
         var matchedIndex = names.FindIndex(name =>
             name.Equals(baseDayText, StringComparison.OrdinalIgnoreCase));
+        if (matchedIndex < 0)
+        {
+            var canonicalNames = new[] { "周一", "周二", "周三", "周四", "周五" };
+            matchedIndex = Array.FindIndex(canonicalNames, name =>
+                name.Equals(baseDayText, StringComparison.OrdinalIgnoreCase));
+        }
+
         if (matchedIndex < 0)
         {
             throw new InvalidOperationException(

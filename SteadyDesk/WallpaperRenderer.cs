@@ -237,7 +237,7 @@ internal static class WallpaperRenderer
 
             if (activeEntry?.PeriodId.Equals(period.Id, StringComparison.OrdinalIgnoreCase) == true)
             {
-                var activeCell = activeEntry.Kind == ScheduleCellKind.Break || isBreak
+                var activeCell = isBreak
                     ? new RectangleF(table.X + firstColumnWidth, y, table.Width - firstColumnWidth, rowHeight)
                     : activeDay >= 0
                         ? new RectangleF(table.X + firstColumnWidth + activeDay * dayColumnWidth, y, dayColumnWidth, rowHeight)

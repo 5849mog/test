@@ -155,15 +155,15 @@ internal sealed class ScheduleDateOverrideEditorForm : Form
 
         if (_overrides.TryGetValue(periodId, out var dateCell))
         {
-            row.Cells["override"].Value = FormatCell(period, dateCell);
+            row.Cells["override"].Value = "已覆盖 · " + FormatCell(period, dateCell);
             row.Cells["override"].Style.ForeColor = Wine;
-            row.Cells["override"].Style.Font = new Font("Microsoft YaHei", 9.2f, FontStyle.Bold);
+            row.Cells["override"].Style.Font = null;
         }
         else
         {
             row.Cells["override"].Value = "继承";
             row.Cells["override"].Style.ForeColor = Muted;
-            row.Cells["override"].Style.Font = new Font("Microsoft YaHei", 9.2f, FontStyle.Italic);
+            row.Cells["override"].Style.Font = null;
         }
     }
 

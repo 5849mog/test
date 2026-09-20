@@ -302,7 +302,8 @@ internal static class ConfigStore
         if (sourceSchemaVersion < 4 && File.Exists(AppStorage.ConfigPath))
         {
             LastMigrationBackupPath = BackupBeforeMigration(sourceSchemaVersion);
-            shouldSave = true;
+            // 只有备份成功后才自动覆盖旧配置；备份失败时仍可在本次运行使用迁移结果。
+            shouldSave |= LastMigrationBackupPath is not null;
         }
 
         config.Normalize();
