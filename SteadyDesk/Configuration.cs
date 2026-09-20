@@ -264,6 +264,7 @@ internal static class ConfigStore
 
     public static string? LastRecoveryPath { get; private set; }
     public static string? LastMigrationBackupPath { get; private set; }
+    private static int? _pendingMigrationSourceVersion;
 
     public static bool Exists => File.Exists(AppStorage.ConfigPath);
 
@@ -271,6 +272,7 @@ internal static class ConfigStore
     {
         LastRecoveryPath = null;
         LastMigrationBackupPath = null;
+        _pendingMigrationSourceVersion = null;
         AppConfig? config;
         var shouldSave = false;
 
@@ -302,8 +304,14 @@ internal static class ConfigStore
         if (sourceSchemaVersion < 4 && File.Exists(AppStorage.ConfigPath))
         {
             LastMigrationBackupPath = BackupBeforeMigration(sourceSchemaVersion);
-            // 只有备份成功后才自动覆盖旧配置；备份失败时仍可在本次运行使用迁移结果。
-            shouldSave |= LastMigrationBackupPath is not null;
+            if (LastMigrationBackupPath is null)
+            {
+                _pendingMigrationSourceVersion = sourceSchemaVersion;
+            }
+            else
+            {
+                shouldSave = true;
+            }
         }
 
         config.Normalize();
@@ -318,6 +326,23 @@ internal static class ConfigStore
 
     public static void Save(AppConfig config)
     {
+        if (_pendingMigrationSourceVersion is int sourceSchemaVersion
+            && File.Exists(AppStorage.ConfigPath))
+        {
+            var backupPath = BackupBeforeMigration(sourceSchemaVersion);
+            if (backupPath is null)
+            {
+                throw new IOException("旧版配置尚未成功备份，为避免数据丢失，本次保存已停止。");
+            }
+
+            LastMigrationBackupPath = backupPath;
+            _pendingMigrationSourceVersion = null;
+        }
+        else if (_pendingMigrationSourceVersion.HasValue)
+        {
+            _pendingMigrationSourceVersion = null;
+        }
+
         config.Normalize();
         Directory.CreateDirectory(AppStorage.RootDirectory);
         var temporaryPath = AppStorage.ConfigPath + ".tmp";
