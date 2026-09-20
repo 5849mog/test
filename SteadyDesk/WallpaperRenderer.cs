@@ -137,13 +137,22 @@ internal static class WallpaperRenderer
     {
         var schedule = config.Schedule;
         var theme = config.Theme;
-        var rows = schedule.Rows;
+        var periods = schedule.Periods;
         var firstColumnWidth = table.Width * .20f;
         var dayColumnWidth = (table.Width - firstColumnWidth) / 5f;
-        var rowHeight = table.Height / Math.Max(1, rows.Count + 1);
+        var rowHeight = table.Height / Math.Max(1, periods.Count + 1);
         var lineWidth = Math.Max(.8f, scale * .65f);
-        var activeDay = GetWeekdayIndex(today);
-        var activeRow = GetActiveRowIndex(schedule, now);
+
+        var resolvedToday = ScheduleEngine.ResolveDay(schedule, today);
+        var activeDay = resolvedToday.DisplayDayIndex ?? -1;
+        var activeEntry = ScheduleEngine.GetActiveEntry(resolvedToday, TimeOnly.FromDateTime(now));
+        var displayDays = Enumerable.Range(0, 5)
+            .Select(dayIndex => ScheduleEngine.ResolveTemplateDay(schedule, dayIndex))
+            .ToArray();
+        if (activeDay is >= 0 and < 5 && !resolvedToday.IsDayOff)
+        {
+            displayDays[activeDay] = resolvedToday;
+        }
 
         using var gridPen = new Pen(Color.FromArgb(34, ParseColor(theme.InkSoft, Color.Gray)), lineWidth);
         using var borderPen = new Pen(Color.FromArgb(58, ParseColor(theme.Wine, Color.DarkRed)), lineWidth);
@@ -199,13 +208,19 @@ internal static class WallpaperRenderer
 
         DrawVerticalLines(graphics, gridPen, table.X, table.Y, rowHeight, firstColumnWidth, dayColumnWidth, 6);
 
-        for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+        for (var rowIndex = 0; rowIndex < periods.Count; rowIndex++)
         {
-            var row = rows[rowIndex];
+            var period = periods[rowIndex];
             var y = table.Y + rowHeight * (rowIndex + 1);
             var rowRect = new RectangleF(table.X, y, table.Width, rowHeight);
+            var isBreak = period.Kind == ScheduleCellKind.Break;
+            var rowEntries = displayDays
+                .Select(day => day.GetEntry(period.Id))
+                .ToArray();
+            var isMergedBreak = isBreak
+                && rowEntries.All(entry => entry?.Kind == ScheduleCellKind.Break);
 
-            if (row.IsBreak)
+            if (isBreak)
             {
                 graphics.FillRectangle(breakBrush, rowRect);
             }
@@ -215,18 +230,19 @@ internal static class WallpaperRenderer
             }
 
             graphics.FillRectangle(leftBrush, table.X, y, firstColumnWidth, rowHeight);
-            if (!row.IsBreak)
+            if (!isMergedBreak)
             {
                 graphics.FillRectangle(fridayBrush, table.Right - dayColumnWidth, y, dayColumnWidth, rowHeight);
             }
+
             if (activeDay >= 0)
             {
                 graphics.FillRectangle(activeColumnBrush, table.X + firstColumnWidth + activeDay * dayColumnWidth, y, dayColumnWidth, rowHeight);
             }
 
-            if (activeRow == rowIndex)
+            if (activeEntry?.PeriodId.Equals(period.Id, StringComparison.OrdinalIgnoreCase) == true)
             {
-                var activeCell = row.IsBreak
+                var activeCell = isMergedBreak
                     ? new RectangleF(table.X + firstColumnWidth, y, table.Width - firstColumnWidth, rowHeight)
                     : activeDay >= 0
                         ? new RectangleF(table.X + firstColumnWidth + activeDay * dayColumnWidth, y, dayColumnWidth, rowHeight)
@@ -238,14 +254,22 @@ internal static class WallpaperRenderer
                 }
             }
 
-            DrawPeriodCell(graphics,
+            DrawPeriodCell(
+                graphics,
                 new RectangleF(table.X, y, firstColumnWidth, rowHeight),
-                row, periodFont, timeFont, courseBrush, timeBrush);
+                period,
+                periodFont,
+                timeFont,
+                courseBrush,
+                timeBrush);
 
-            if (row.IsBreak)
+            if (isMergedBreak)
             {
                 var merged = new RectangleF(table.X + firstColumnWidth, y, table.Width - firstColumnWidth, rowHeight);
-                graphics.DrawString(row.Courses.FirstOrDefault() ?? string.Empty, courseFont, timeBrush, merged, center);
+                var breakEntry = activeDay >= 0
+                    ? rowEntries[activeDay]
+                    : rowEntries.FirstOrDefault(entry => entry?.Kind != ScheduleCellKind.Empty);
+                graphics.DrawString(ScheduleEngine.FormatCell(breakEntry), courseFont, timeBrush, merged, center);
                 graphics.DrawLine(gridPen, table.X + firstColumnWidth, y, table.X + firstColumnWidth, y + rowHeight);
             }
             else
@@ -253,9 +277,9 @@ internal static class WallpaperRenderer
                 for (var day = 0; day < 5; day++)
                 {
                     var cell = new RectangleF(table.X + firstColumnWidth + day * dayColumnWidth, y, dayColumnWidth, rowHeight);
-                    var course = day < row.Courses.Count ? row.Courses[day] : string.Empty;
+                    var course = ScheduleEngine.FormatCell(rowEntries[day]);
                     var font = course.Contains('\n') ? courseSmallFont : courseFont;
-                    var brush = string.IsNullOrWhiteSpace(course) ? emptyBrush : courseBrush;
+                    var brush = course == "—" ? emptyBrush : courseBrush;
                     graphics.DrawString(course, font, brush, cell, center);
                 }
 
@@ -271,17 +295,17 @@ internal static class WallpaperRenderer
     private static void DrawPeriodCell(
         Graphics graphics,
         RectangleF cell,
-        ScheduleRowConfig row,
+        SchedulePeriodConfig period,
         Font labelFont,
         Font timeFont,
         Brush labelBrush,
         Brush timeBrush)
     {
         using var labelFormat = CenterFormat();
-        var labelRect = new RectangleF(cell.X, cell.Y + 2f, cell.Width, cell.Height * .50f);
-        var timeRect = new RectangleF(cell.X, cell.Y + cell.Height * .48f, cell.Width, cell.Height * .48f);
-        graphics.DrawString(row.Label, labelFont, labelBrush, labelRect, labelFormat);
-        graphics.DrawString(row.Time, timeFont, timeBrush, timeRect, labelFormat);
+        var labelRect = new RectangleF(cell.X, cell.Y + 2f, cell.Width, cell.Height * .48f);
+        var timeRect = new RectangleF(cell.X, cell.Y + cell.Height * .45f, cell.Width, cell.Height * .53f);
+        graphics.DrawString(period.Label, labelFont, labelBrush, labelRect, labelFormat);
+        graphics.DrawString(ScheduleEngine.FormatPeriodTime(period), timeFont, timeBrush, timeRect, labelFormat);
     }
 
     private static void DrawVerticalLines(
@@ -497,36 +521,6 @@ internal static class WallpaperRenderer
         {
             graphics.DrawLine(progressPen, left, lineY, left + (right - left) * progress, lineY);
         }
-    }
-
-    private static int GetWeekdayIndex(DateTime date)
-    {
-        return date.DayOfWeek is >= DayOfWeek.Monday and <= DayOfWeek.Friday
-            ? (int)date.DayOfWeek - (int)DayOfWeek.Monday
-            : -1;
-    }
-
-    private static int GetActiveRowIndex(ScheduleConfig schedule, DateTime now)
-    {
-        if (GetWeekdayIndex(now.Date) < 0)
-        {
-            return -1;
-        }
-
-        var time = now.TimeOfDay;
-        for (var index = 0; index < schedule.Rows.Count; index++)
-        {
-            var row = schedule.Rows[index];
-            if (TimeSpan.TryParse(row.Start, out var start)
-                && TimeSpan.TryParse(row.End, out var end)
-                && time >= start
-                && time < end)
-            {
-                return index;
-            }
-        }
-
-        return -1;
     }
 
     private static void DrawActiveCourseCell(

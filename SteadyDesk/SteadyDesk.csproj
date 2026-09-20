@@ -18,6 +18,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="SteadyDesk.ScheduleChecks" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="..\assets\wallpaper-background-v1.png">
       <LogicalName>SteadyDesk.Assets.wallpaper-background-v1.png</LogicalName>
     </EmbeddedResource>

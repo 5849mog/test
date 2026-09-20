@@ -23,6 +23,9 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Verify schedule engine
+        run: dotnet run --project SteadyDesk.ScheduleChecks/SteadyDesk.ScheduleChecks.csproj -c Release
+
       - name: Publish single-file executable
         run: >
           dotnet publish SteadyDesk/SteadyDesk.csproj
