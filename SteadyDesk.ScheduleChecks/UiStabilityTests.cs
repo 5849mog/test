@@ -24,6 +24,8 @@ internal static class UiStabilityTests
         var controls = Descendants(form).ToList();
         var tabs = controls.OfType<TabControl>().ToList();
         var grids = controls.OfType<DataGridView>().ToList();
+        var splitters = controls.OfType<SplitContainer>().ToList();
+        var previewPanes = controls.OfType<SettingsPreviewPane>().ToList();
         var buttons = controls.OfType<Button>().Select(button => button.Text).ToHashSet();
 
         runner.Equal("设置中心标题", "稳序桌面 · 控制中心", form.Text);
@@ -32,6 +34,16 @@ internal static class UiStabilityTests
         runner.Check("设置中心包含标签页容器", tabs.Count >= 1);
         runner.Check("设置中心至少七个功能页", tabs.Sum(tab => tab.TabPages.Count) >= 7);
         runner.Check("设置中心包含事件、周课表和特殊日期表格", grids.Count >= 3);
+        runner.Equal("设置中心只有一个固定实时预览", 1, previewPanes.Count);
+        runner.Check(
+            "实时预览与设置页并排存在",
+            splitters.Any(splitter =>
+                Descendants(splitter.Panel1).OfType<TabControl>().Any()
+                && Descendants(splitter.Panel2).OfType<SettingsPreviewPane>().Any()));
+        runner.Check(
+            "实时预览提供场景与分辨率选项",
+            Descendants(previewPanes[0]).OfType<ComboBox>().Count() >= 2);
+        runner.Check("设置中心保留最终确认按钮", buttons.Contains("保存并应用"));
         runner.Check("设置中心保留导入入口", buttons.Contains("导入配置"));
         runner.Check("设置中心保留导出入口", buttons.Contains("导出全部配置"));
         runner.Check("设置中心保留恢复默认入口", buttons.Contains("恢复全部默认设置"));
