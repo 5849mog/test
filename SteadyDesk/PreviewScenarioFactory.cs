@@ -65,14 +65,14 @@ internal static class PreviewScenarioFactory
                 && item.Start.HasValue
                 && item.End.HasValue
                 && (!requireTimeOverride || item.UsesTimeOverride));
-            if (entry is null)
+            if (entry?.Start is not TimeOnly start || entry.End is not TimeOnly end)
             {
                 continue;
             }
 
             var date = DateForDayIndex(anchor, dayIndex);
             config.Schedule.DateOverrides.RemoveAll(item => item.Date.Date == date.Date);
-            return date.Add(Middle(entry.Start.Value, entry.End.Value));
+            return date.Add(Middle(start, end));
         }
 
         var fallbackDayIndex = requiredDayIndex ?? 0;

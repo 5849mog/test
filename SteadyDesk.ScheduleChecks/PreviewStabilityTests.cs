@@ -48,7 +48,7 @@ internal static class PreviewStabilityTests
             runner.Check(scenario + " 返回标签", !string.IsNullOrWhiteSpace(result.Label));
             runner.DoesNotThrow(
                 scenario + " 课表仍然有效",
-                () => ScheduleEngine.ValidateOrThrow(result.Config.Schedule));
+                () => ScheduleEngine.ValidateOrThrow(result.Config!.Schedule));
         }
 
         var classPreview = PreviewScenarioFactory.Create(
