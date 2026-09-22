@@ -132,7 +132,7 @@ internal sealed partial class SettingsForm
 
     private void ApplyResponsiveLayout()
     {
-        if (_previewWorkspace is not { IsHandleCreated: true } workspace)
+        if (_previewWorkspace is not SplitContainer workspace)
         {
             return;
         }
