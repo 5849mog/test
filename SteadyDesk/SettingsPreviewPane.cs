@@ -309,7 +309,7 @@ internal sealed class SettingsPreviewPane : UserControl
 
         var compact = ClientSize.Height < 420;
         root.RowStyles[0].Height = compact ? 40 : 48;
-        root.RowStyles[2].Height = compact ? 126 : 178;
+        root.RowStyles[2].Height = compact ? 144 : 178;
         root.RowStyles[3].Height = compact ? 46 : 52;
     }
 

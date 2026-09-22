@@ -164,7 +164,7 @@ internal sealed partial class SettingsForm
             var available = targetOrientation == Orientation.Horizontal
                 ? workspace.ClientSize.Height
                 : workspace.ClientSize.Width;
-            var requestedPanel1MinSize = compact ? 210 : 560;
+            var requestedPanel1MinSize = compact ? 180 : 560;
             var requestedPanel2MinSize = compact ? 210 : 350;
             var availableForPanels = available - workspace.SplitterWidth;
             var otherAvailableForPanels = otherDimension - workspace.SplitterWidth;
@@ -195,7 +195,7 @@ internal sealed partial class SettingsForm
                 otherDimension - workspace.SplitterWidth - workspace.Panel2MinSize);
             if (maximumDistance >= workspace.Panel1MinSize)
             {
-                var preferred = (int)(available * (compact ? 0.42f : 0.61f));
+                var preferred = (int)(available * (compact ? 0.36f : 0.61f));
                 var distance = Math.Clamp(
                     preferred,
                     workspace.Panel1MinSize,
