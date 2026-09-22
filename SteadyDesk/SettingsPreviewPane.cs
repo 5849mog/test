@@ -1,3 +1,5 @@
+using System.Drawing.Imaging;
+
 namespace SteadyDesk;
 
 internal enum PreviewScenario
@@ -268,8 +270,14 @@ internal sealed class SettingsPreviewPane : UserControl
         refresh.Click += (_, _) => RefreshRequested?.Invoke(this, EventArgs.Empty);
         var reset = MakeSmallButton("恢复当前预览");
         reset.Click += (_, _) => ResetOptions();
+        var export = MakeSmallButton("导出预览");
+        export.Click += (_, _) => ExportPreview();
+        var enlarge = MakeSmallButton("放大查看");
+        enlarge.Click += (_, _) => ShowFullScreenPreview();
         buttonRow.Controls.Add(refresh);
         buttonRow.Controls.Add(reset);
+        buttonRow.Controls.Add(export);
+        buttonRow.Controls.Add(enlarge);
 
         var footer = new TableLayoutPanel
         {
@@ -329,6 +337,80 @@ internal sealed class SettingsPreviewPane : UserControl
         if (!_suppressEvents)
         {
             OptionsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void ExportPreview()
+    {
+        if (_picture.Image is null)
+        {
+            return;
+        }
+
+        using var dialog = new SaveFileDialog
+        {
+            Title = "导出当前预览",
+            FileName = "稳序桌面预览.png",
+            Filter = "PNG 图片|*.png|JPEG 图片|*.jpg;*.jpeg",
+            AddExtension = true,
+            OverwritePrompt = true
+        };
+        var owner = FindForm();
+        if (dialog.ShowDialog(owner) != DialogResult.OK)
+        {
+            return;
+        }
+
+        using var copy = new Bitmap(_picture.Image);
+        var extension = Path.GetExtension(dialog.FileName).ToLowerInvariant();
+        copy.Save(
+            dialog.FileName,
+            extension is ".jpg" or ".jpeg" ? ImageFormat.Jpeg : ImageFormat.Png);
+        _summaryLabel.Text = "预览已导出 · " + Path.GetFileName(dialog.FileName);
+    }
+
+    private void ShowFullScreenPreview()
+    {
+        if (_picture.Image is null)
+        {
+            return;
+        }
+
+        using var dialog = new Form
+        {
+            Text = "稳序桌面 · 预览",
+            BackColor = Color.FromArgb(28, 24, 22),
+            StartPosition = FormStartPosition.CenterParent,
+            WindowState = FormWindowState.Maximized,
+            KeyPreview = true,
+            MinimizeBox = false,
+            MaximizeBox = false
+        };
+        var image = new Bitmap(_picture.Image);
+        var picture = new PictureBox
+        {
+            Dock = DockStyle.Fill,
+            BackColor = dialog.BackColor,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Image = image
+        };
+        dialog.Controls.Add(picture);
+        dialog.KeyDown += (_, eventArgs) =>
+        {
+            if (eventArgs.KeyCode == Keys.Escape)
+            {
+                dialog.Close();
+            }
+        };
+
+        try
+        {
+            dialog.ShowDialog(FindForm());
+        }
+        finally
+        {
+            picture.Image = null;
+            image.Dispose();
         }
     }
 

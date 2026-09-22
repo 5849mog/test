@@ -54,7 +54,7 @@ internal sealed partial class SettingsForm
         };
         header.Controls.AddRange([eyebrow, title, subtitle]);
 
-        var tabs = new TabControl
+        var tabs = _settingsTabs = new TabControl
         {
             Name = "SettingsCategories",
             Dock = DockStyle.Fill,
@@ -73,7 +73,7 @@ internal sealed partial class SettingsForm
         tabs.TabPages.Add(BuildContentPage());
         tabs.TabPages.Add(BuildSystemPage());
 
-        var workspace = new SplitContainer
+        var workspace = _previewWorkspace = new SplitContainer
         {
             Name = "SettingsPreviewWorkspace",
             AccessibleName = "设置与固定实时预览",
@@ -124,8 +124,53 @@ internal sealed partial class SettingsForm
         root.Controls.Add(workspace, 0, 1);
         root.Controls.Add(footer, 0, 2);
         Controls.Add(root);
+        Resize += (_, _) => ApplyResponsiveLayout();
+        ApplyResponsiveLayout();
         AcceptButton = apply;
         CancelButton = cancel;
+    }
+
+    private void ApplyResponsiveLayout()
+    {
+        if (_previewWorkspace is not { IsHandleCreated: true } workspace)
+        {
+            return;
+        }
+
+        var compact = ClientSize.Width < 1220;
+        if (compact == _compactPreviewLayout
+            && workspace.Orientation == (compact ? Orientation.Horizontal : Orientation.Vertical))
+        {
+            return;
+        }
+
+        _compactPreviewLayout = compact;
+        workspace.Orientation = compact ? Orientation.Horizontal : Orientation.Vertical;
+        if (compact)
+        {
+            workspace.Panel1MinSize = 250;
+            workspace.Panel2MinSize = 210;
+            workspace.Panel1.Padding = new Padding(0, 0, 0, 6);
+            workspace.Panel2.Padding = new Padding(0, 6, 0, 0);
+        }
+        else
+        {
+            workspace.Panel1MinSize = 560;
+            workspace.Panel2MinSize = 350;
+            workspace.Panel1.Padding = new Padding(0, 0, 8, 0);
+            workspace.Panel2.Padding = new Padding(8, 0, 0, 0);
+        }
+
+        var available = compact ? workspace.Height : workspace.Width;
+        var minimumTotal = workspace.Panel1MinSize + workspace.Panel2MinSize + workspace.SplitterWidth;
+        if (available >= minimumTotal)
+        {
+            var preferred = (int)(available * (compact ? 0.56f : 0.61f));
+            workspace.SplitterDistance = Math.Clamp(
+                preferred,
+                workspace.Panel1MinSize,
+                available - workspace.SplitterWidth - workspace.Panel2MinSize);
+        }
     }
 
     private TabPage BuildOverviewPage()
