@@ -81,9 +81,7 @@ internal sealed partial class SettingsForm
             Orientation = Orientation.Vertical,
             BackColor = Paper,
             BorderStyle = BorderStyle.None,
-            SplitterWidth = 8,
-            Panel1MinSize = 560,
-            Panel2MinSize = 350
+            SplitterWidth = 8
         };
         workspace.Panel1.Padding = new Padding(0, 0, 8, 0);
         workspace.Panel2.Padding = new Padding(8, 0, 0, 0);
@@ -141,31 +139,60 @@ internal sealed partial class SettingsForm
         _applyingResponsiveLayout = true;
         try
         {
+            if (workspace.Width <= 0 || workspace.Height <= 0)
+            {
+                workspace.Orientation = targetOrientation;
+                return;
+            }
+
+            var dimensionForSplit = targetOrientation == Orientation.Horizontal
+                ? workspace.ClientSize.Height
+                : workspace.ClientSize.Width;
+            var otherDimension = targetOrientation == Orientation.Horizontal
+                ? workspace.ClientSize.Width
+                : workspace.ClientSize.Height;
+            if (Math.Min(dimensionForSplit, otherDimension) < workspace.SplitterWidth + 50)
+            {
+                workspace.Orientation = targetOrientation;
+                return;
+            }
+
+            workspace.Panel1MinSize = 25;
+            workspace.Panel2MinSize = 25;
             workspace.Orientation = targetOrientation;
+
+            var available = targetOrientation == Orientation.Horizontal
+                ? workspace.ClientSize.Height
+                : workspace.ClientSize.Width;
+            var requestedPanel1MinSize = compact ? 250 : 560;
+            var requestedPanel2MinSize = compact ? 210 : 350;
+            var availableForPanels = available - workspace.SplitterWidth;
+            var otherAvailableForPanels = otherDimension - workspace.SplitterWidth;
+            var panel1MinSize = requestedPanel1MinSize;
+            var panel2MinSize = requestedPanel2MinSize;
+            if (Math.Min(availableForPanels, otherAvailableForPanels)
+                < panel1MinSize + panel2MinSize)
+            {
+                panel1MinSize = 25;
+                panel2MinSize = 25;
+            }
+
+            workspace.Panel1MinSize = panel1MinSize;
+            workspace.Panel2MinSize = panel2MinSize;
             if (compact)
             {
-                workspace.Panel1MinSize = 250;
-                workspace.Panel2MinSize = 210;
                 workspace.Panel1.Padding = new Padding(0, 0, 0, 6);
                 workspace.Panel2.Padding = new Padding(0, 6, 0, 0);
             }
             else
             {
-                workspace.Panel1MinSize = 560;
-                workspace.Panel2MinSize = 350;
                 workspace.Panel1.Padding = new Padding(0, 0, 8, 0);
                 workspace.Panel2.Padding = new Padding(8, 0, 0, 0);
             }
 
-            if (workspace.Width <= 0 || workspace.Height <= 0)
-            {
-                return;
-            }
-
-            var available = targetOrientation == Orientation.Horizontal
-                ? workspace.ClientSize.Height
-                : workspace.ClientSize.Width;
-            var maximumDistance = available - workspace.SplitterWidth - workspace.Panel2MinSize;
+            var maximumDistance = Math.Min(
+                available - workspace.SplitterWidth - workspace.Panel2MinSize,
+                otherDimension - workspace.SplitterWidth - workspace.Panel2MinSize);
             if (maximumDistance >= workspace.Panel1MinSize)
             {
                 var preferred = (int)(available * (compact ? 0.56f : 0.61f));
