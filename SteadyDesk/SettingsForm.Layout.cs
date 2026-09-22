@@ -137,17 +137,19 @@ internal sealed partial class SettingsForm
         }
 
         var compact = ClientSize.Width < 1220;
-        var available = compact ? workspace.ClientSize.Height : workspace.ClientSize.Width;
+        var targetOrientation = compact ? Orientation.Horizontal : Orientation.Vertical;
+        var available = targetOrientation == Orientation.Horizontal
+            ? workspace.ClientSize.Height
+            : workspace.ClientSize.Width;
         if (compact == _compactPreviewLayout
-            && workspace.Orientation == (compact ? Orientation.Horizontal : Orientation.Vertical)
+            && workspace.Orientation == targetOrientation
             && available == _responsiveAvailable)
         {
             return;
         }
 
         _compactPreviewLayout = compact;
-        _responsiveAvailable = available;
-        workspace.Orientation = compact ? Orientation.Horizontal : Orientation.Vertical;
+        workspace.Orientation = targetOrientation;
         if (compact)
         {
             workspace.Panel1MinSize = 250;
@@ -163,14 +165,18 @@ internal sealed partial class SettingsForm
             workspace.Panel2.Padding = new Padding(8, 0, 0, 0);
         }
 
-        var minimumTotal = workspace.Panel1MinSize + workspace.Panel2MinSize + workspace.SplitterWidth;
-        if (available >= minimumTotal)
+        available = targetOrientation == Orientation.Horizontal
+            ? workspace.ClientSize.Height
+            : workspace.ClientSize.Width;
+        _responsiveAvailable = available;
+        var maximumDistance = available - workspace.SplitterWidth - workspace.Panel2MinSize;
+        if (maximumDistance >= workspace.Panel1MinSize)
         {
             var preferred = (int)(available * (compact ? 0.56f : 0.61f));
             workspace.SplitterDistance = Math.Clamp(
                 preferred,
                 workspace.Panel1MinSize,
-                available - workspace.SplitterWidth - workspace.Panel2MinSize);
+                maximumDistance);
         }
     }
 
