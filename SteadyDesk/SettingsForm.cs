@@ -50,6 +50,7 @@ internal sealed partial class SettingsForm : Form
     private TabControl? _settingsTabs;
     private SplitContainer? _previewWorkspace;
     private bool _compactPreviewLayout;
+    private int _responsiveAvailable = -1;
 
     private string? _pendingBackgroundPath;
     private bool _loadingControls;

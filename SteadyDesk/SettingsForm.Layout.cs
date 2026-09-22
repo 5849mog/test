@@ -125,6 +125,7 @@ internal sealed partial class SettingsForm
         root.Controls.Add(footer, 0, 2);
         Controls.Add(root);
         ClientSizeChanged += (_, _) => ApplyResponsiveLayout();
+        workspace.SizeChanged += (_, _) => ApplyResponsiveLayout();
         ApplyResponsiveLayout();
         AcceptButton = apply;
         CancelButton = cancel;
@@ -138,13 +139,16 @@ internal sealed partial class SettingsForm
         }
 
         var compact = ClientSize.Width < 1220;
+        var available = compact ? workspace.ClientSize.Height : workspace.ClientSize.Width;
         if (compact == _compactPreviewLayout
-            && workspace.Orientation == (compact ? Orientation.Horizontal : Orientation.Vertical))
+            && workspace.Orientation == (compact ? Orientation.Horizontal : Orientation.Vertical)
+            && available == _responsiveAvailable)
         {
             return;
         }
 
         _compactPreviewLayout = compact;
+        _responsiveAvailable = available;
         workspace.Orientation = compact ? Orientation.Horizontal : Orientation.Vertical;
         if (compact)
         {
@@ -161,7 +165,6 @@ internal sealed partial class SettingsForm
             workspace.Panel2.Padding = new Padding(8, 0, 0, 0);
         }
 
-        var available = compact ? workspace.Height : workspace.Width;
         var minimumTotal = workspace.Panel1MinSize + workspace.Panel2MinSize + workspace.SplitterWidth;
         if (available >= minimumTotal)
         {
