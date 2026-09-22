@@ -40,6 +40,7 @@ internal sealed class SettingsPreviewPane : UserControl
     private readonly DateTimePicker _date;
     private readonly DateTimePicker _time;
     private readonly System.Windows.Forms.Timer _clockTimer;
+    private TableLayoutPanel? _layoutRoot;
     private bool _suppressEvents;
 
     public event EventHandler? OptionsChanged;
@@ -189,7 +190,7 @@ internal sealed class SettingsPreviewPane : UserControl
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel
+        var root = _layoutRoot = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
@@ -295,6 +296,21 @@ internal sealed class SettingsPreviewPane : UserControl
         root.Controls.Add(controls, 0, 2);
         root.Controls.Add(footer, 0, 3);
         Controls.Add(root);
+        ClientSizeChanged += (_, _) => ApplyResponsiveLayout();
+        ApplyResponsiveLayout();
+    }
+
+    private void ApplyResponsiveLayout()
+    {
+        if (_layoutRoot is not TableLayoutPanel root)
+        {
+            return;
+        }
+
+        var compact = ClientSize.Height < 420;
+        root.RowStyles[0].Height = compact ? 40 : 48;
+        root.RowStyles[2].Height = compact ? 126 : 178;
+        root.RowStyles[3].Height = compact ? 46 : 52;
     }
 
     private void WireEvents()
