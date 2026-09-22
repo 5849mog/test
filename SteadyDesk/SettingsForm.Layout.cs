@@ -82,7 +82,6 @@ internal sealed partial class SettingsForm
             BackColor = Paper,
             BorderStyle = BorderStyle.None,
             SplitterWidth = 8,
-            Size = new Size(1340, 690),
             SplitterDistance = 820,
             Panel1MinSize = 560,
             Panel2MinSize = 350
