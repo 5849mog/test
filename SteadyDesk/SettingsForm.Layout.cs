@@ -131,52 +131,57 @@ internal sealed partial class SettingsForm
 
     private void ApplyResponsiveLayout()
     {
-        if (_previewWorkspace is not SplitContainer workspace)
+        if (_applyingResponsiveLayout || _previewWorkspace is not SplitContainer workspace)
         {
             return;
         }
 
         var compact = ClientSize.Width < 1220;
         var targetOrientation = compact ? Orientation.Horizontal : Orientation.Vertical;
-        var available = targetOrientation == Orientation.Horizontal
-            ? workspace.ClientSize.Height
-            : workspace.ClientSize.Width;
-        if (compact == _compactPreviewLayout
-            && workspace.Orientation == targetOrientation
-            && available == _responsiveAvailable)
+        _applyingResponsiveLayout = true;
+        try
         {
-            return;
-        }
+            workspace.Orientation = targetOrientation;
+            if (compact)
+            {
+                workspace.Panel1MinSize = 250;
+                workspace.Panel2MinSize = 210;
+                workspace.Panel1.Padding = new Padding(0, 0, 0, 6);
+                workspace.Panel2.Padding = new Padding(0, 6, 0, 0);
+            }
+            else
+            {
+                workspace.Panel1MinSize = 560;
+                workspace.Panel2MinSize = 350;
+                workspace.Panel1.Padding = new Padding(0, 0, 8, 0);
+                workspace.Panel2.Padding = new Padding(8, 0, 0, 0);
+            }
 
-        _compactPreviewLayout = compact;
-        workspace.Orientation = targetOrientation;
-        if (compact)
-        {
-            workspace.Panel1MinSize = 250;
-            workspace.Panel2MinSize = 210;
-            workspace.Panel1.Padding = new Padding(0, 0, 0, 6);
-            workspace.Panel2.Padding = new Padding(0, 6, 0, 0);
-        }
-        else
-        {
-            workspace.Panel1MinSize = 560;
-            workspace.Panel2MinSize = 350;
-            workspace.Panel1.Padding = new Padding(0, 0, 8, 0);
-            workspace.Panel2.Padding = new Padding(8, 0, 0, 0);
-        }
+            if (workspace.Width <= 0 || workspace.Height <= 0)
+            {
+                return;
+            }
 
-        available = targetOrientation == Orientation.Horizontal
-            ? workspace.ClientSize.Height
-            : workspace.ClientSize.Width;
-        _responsiveAvailable = available;
-        var maximumDistance = available - workspace.SplitterWidth - workspace.Panel2MinSize;
-        if (maximumDistance >= workspace.Panel1MinSize)
+            var available = targetOrientation == Orientation.Horizontal
+                ? workspace.ClientSize.Height
+                : workspace.ClientSize.Width;
+            var maximumDistance = available - workspace.SplitterWidth - workspace.Panel2MinSize;
+            if (maximumDistance >= workspace.Panel1MinSize)
+            {
+                var preferred = (int)(available * (compact ? 0.56f : 0.61f));
+                var distance = Math.Clamp(
+                    preferred,
+                    workspace.Panel1MinSize,
+                    maximumDistance);
+                if (workspace.SplitterDistance != distance)
+                {
+                    workspace.SplitterDistance = distance;
+                }
+            }
+        }
+        finally
         {
-            var preferred = (int)(available * (compact ? 0.56f : 0.61f));
-            workspace.SplitterDistance = Math.Clamp(
-                preferred,
-                workspace.Panel1MinSize,
-                maximumDistance);
+            _applyingResponsiveLayout = false;
         }
     }
 

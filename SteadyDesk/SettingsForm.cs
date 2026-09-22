@@ -49,8 +49,7 @@ internal sealed partial class SettingsForm : Form
     private readonly Dictionary<string, TextBox> _themeInputs = new(StringComparer.OrdinalIgnoreCase);
     private TabControl? _settingsTabs;
     private SplitContainer? _previewWorkspace;
-    private bool _compactPreviewLayout;
-    private int _responsiveAvailable = -1;
+    private bool _applyingResponsiveLayout;
 
     private string? _pendingBackgroundPath;
     private bool _loadingControls;
