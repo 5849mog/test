@@ -247,6 +247,11 @@ internal sealed partial class SettingsForm : Form
         _previewCoordinator.RequestRefresh();
     }
 
+    internal void RenderPreviewForSnapshot()
+    {
+        _previewCoordinator.RefreshNow();
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)

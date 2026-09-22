@@ -3,8 +3,15 @@ namespace SteadyDesk.ScheduleChecks;
 internal static class Program
 {
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
+        if (args.Length == 2
+            && string.Equals(args[0], "--render-settings-snapshots", StringComparison.OrdinalIgnoreCase))
+        {
+            SettingsSnapshotRenderer.Render(args[1]);
+            return 0;
+        }
+
         var runner = new StabilityTestRunner();
 
         ScheduleStabilityTests.Run(runner);

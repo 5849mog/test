@@ -28,6 +28,22 @@ jobs:
       - name: Run final stability sweep
         run: dotnet run --project SteadyDesk.ScheduleChecks/SteadyDesk.ScheduleChecks.csproj -c Release
 
+      - name: Render settings center snapshots
+        shell: pwsh
+        run: |
+          $profileRoot = Join-Path $env:RUNNER_TEMP "steady-desk-snapshot-profile"
+          $snapshotDir = Join-Path $env:RUNNER_TEMP "steady-desk-settings-snapshots"
+          New-Item -ItemType Directory -Force -Path $profileRoot | Out-Null
+          New-Item -ItemType Directory -Force -Path $snapshotDir | Out-Null
+          $env:STEADY_DESK_DATA_DIR = $profileRoot
+          dotnet run --project SteadyDesk.ScheduleChecks/SteadyDesk.ScheduleChecks.csproj -c Release -- --render-settings-snapshots $snapshotDir
+
+      - name: Upload settings center snapshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: steady-desk-settings-snapshots
+          path: ${{ runner.temp }}/steady-desk-settings-snapshots
+
       - name: Publish single-file executable
         run: >
           dotnet publish SteadyDesk/SteadyDesk.csproj
