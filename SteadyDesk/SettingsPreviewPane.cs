@@ -397,8 +397,10 @@ internal sealed class SettingsPreviewPane : UserControl
             Text = "稳序桌面 · 预览",
             BackColor = Color.FromArgb(28, 24, 22),
             StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.None,
             WindowState = FormWindowState.Maximized,
             KeyPreview = true,
+            ControlBox = false,
             MinimizeBox = false,
             MaximizeBox = false
         };
@@ -410,7 +412,24 @@ internal sealed class SettingsPreviewPane : UserControl
             SizeMode = PictureBoxSizeMode.Zoom,
             Image = image
         };
+        var exitButton = CreateFullScreenExitButton(dialog.Close);
+        void PositionExitButton()
+        {
+            if (dialog.ClientSize.Width <= 0)
+            {
+                return;
+            }
+
+            exitButton.Location = new Point(
+                Math.Max(16, dialog.ClientSize.Width - exitButton.Width - 24),
+                18);
+        }
+
+        dialog.Resize += (_, _) => PositionExitButton();
+        dialog.Shown += (_, _) => PositionExitButton();
         dialog.Controls.Add(picture);
+        dialog.Controls.Add(exitButton);
+        exitButton.BringToFront();
         dialog.KeyDown += (_, eventArgs) =>
         {
             if (eventArgs.KeyCode == Keys.Escape)
@@ -428,6 +447,33 @@ internal sealed class SettingsPreviewPane : UserControl
             picture.Image = null;
             image.Dispose();
         }
+    }
+
+    internal static Button CreateFullScreenExitButton(Action close)
+    {
+        ArgumentNullException.ThrowIfNull(close);
+
+        var button = new Button
+        {
+            Name = "FullScreenExitButton",
+            AccessibleName = "退出全屏预览",
+            Text = "退出全屏",
+            AutoSize = false,
+            Size = new Size(144, 54),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = SettingsPalette.Wine,
+            ForeColor = SettingsPalette.PaperBright,
+            Font = new Font("Microsoft YaHei", 11f, FontStyle.Bold),
+            Padding = new Padding(12, 5, 12, 5),
+            Cursor = Cursors.Hand,
+            TabStop = false,
+            UseVisualStyleBackColor = false
+        };
+        button.FlatAppearance.BorderColor = SettingsPalette.Gold;
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.MouseOverBackColor = Color.FromArgb(131, 43, 55);
+        button.Click += (_, _) => close();
+        return button;
     }
 
     private static ComboBox CreateComboBox(string accessibleName)

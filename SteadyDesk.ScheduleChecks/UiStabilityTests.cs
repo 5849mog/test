@@ -57,6 +57,17 @@ internal static class UiStabilityTests
         runner.Check(
             "实时预览提供导出与放大查看",
             buttons.Contains("导出预览") && buttons.Contains("放大查看"));
+        var exitInvoked = false;
+        using (var exitButton = SettingsPreviewPane.CreateFullScreenExitButton(() => exitInvoked = true))
+        {
+            runner.Equal("全屏退出按钮文字", "退出全屏", exitButton.Text);
+            runner.Equal("全屏退出按钮辅助名称", "退出全屏预览", exitButton.AccessibleName);
+            runner.Check(
+                "全屏退出按钮满足触控尺寸",
+                exitButton.Width >= 120 && exitButton.Height >= 48);
+            exitButton.PerformClick();
+        }
+        runner.Check("全屏退出按钮可触发关闭动作", exitInvoked);
         runner.Check("设置中心保留最终确认按钮", buttons.Contains("保存并应用"));
         runner.Check("设置中心保留导入入口", buttons.Contains("导入配置"));
         runner.Check("设置中心保留导出入口", buttons.Contains("导出全部配置"));
