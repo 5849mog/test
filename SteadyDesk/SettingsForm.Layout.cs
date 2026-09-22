@@ -124,7 +124,7 @@ internal sealed partial class SettingsForm
         root.Controls.Add(workspace, 0, 1);
         root.Controls.Add(footer, 0, 2);
         Controls.Add(root);
-        Resize += (_, _) => ApplyResponsiveLayout();
+        ClientSizeChanged += (_, _) => ApplyResponsiveLayout();
         ApplyResponsiveLayout();
         AcceptButton = apply;
         CancelButton = cancel;
