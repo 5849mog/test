@@ -1,3 +1,5 @@
+using System.Drawing.Imaging;
+
 namespace SteadyDesk;
 
 internal enum PreviewScenario
@@ -38,6 +40,7 @@ internal sealed class SettingsPreviewPane : UserControl
     private readonly DateTimePicker _date;
     private readonly DateTimePicker _time;
     private readonly System.Windows.Forms.Timer _clockTimer;
+    private TableLayoutPanel? _layoutRoot;
     private bool _suppressEvents;
 
     public event EventHandler? OptionsChanged;
@@ -187,7 +190,7 @@ internal sealed class SettingsPreviewPane : UserControl
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel
+        var root = _layoutRoot = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
@@ -268,8 +271,14 @@ internal sealed class SettingsPreviewPane : UserControl
         refresh.Click += (_, _) => RefreshRequested?.Invoke(this, EventArgs.Empty);
         var reset = MakeSmallButton("恢复当前预览");
         reset.Click += (_, _) => ResetOptions();
+        var export = MakeSmallButton("导出预览");
+        export.Click += (_, _) => ExportPreview();
+        var enlarge = MakeSmallButton("放大查看");
+        enlarge.Click += (_, _) => ShowFullScreenPreview();
         buttonRow.Controls.Add(refresh);
         buttonRow.Controls.Add(reset);
+        buttonRow.Controls.Add(export);
+        buttonRow.Controls.Add(enlarge);
 
         var footer = new TableLayoutPanel
         {
@@ -287,6 +296,21 @@ internal sealed class SettingsPreviewPane : UserControl
         root.Controls.Add(controls, 0, 2);
         root.Controls.Add(footer, 0, 3);
         Controls.Add(root);
+        ClientSizeChanged += (_, _) => ApplyResponsiveLayout();
+        ApplyResponsiveLayout();
+    }
+
+    private void ApplyResponsiveLayout()
+    {
+        if (_layoutRoot is not TableLayoutPanel root)
+        {
+            return;
+        }
+
+        var compact = ClientSize.Height < 420;
+        root.RowStyles[0].Height = compact ? 40 : 48;
+        root.RowStyles[2].Height = compact ? 144 : 178;
+        root.RowStyles[3].Height = compact ? 46 : 52;
     }
 
     private void WireEvents()
@@ -330,6 +354,126 @@ internal sealed class SettingsPreviewPane : UserControl
         {
             OptionsChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private void ExportPreview()
+    {
+        if (_picture.Image is null)
+        {
+            return;
+        }
+
+        using var dialog = new SaveFileDialog
+        {
+            Title = "导出当前预览",
+            FileName = "稳序桌面预览.png",
+            Filter = "PNG 图片|*.png|JPEG 图片|*.jpg;*.jpeg",
+            AddExtension = true,
+            OverwritePrompt = true
+        };
+        var owner = FindForm();
+        if (dialog.ShowDialog(owner) != DialogResult.OK)
+        {
+            return;
+        }
+
+        using var copy = new Bitmap(_picture.Image);
+        var extension = Path.GetExtension(dialog.FileName).ToLowerInvariant();
+        copy.Save(
+            dialog.FileName,
+            extension is ".jpg" or ".jpeg" ? ImageFormat.Jpeg : ImageFormat.Png);
+        _summaryLabel.Text = "预览已导出 · " + Path.GetFileName(dialog.FileName);
+    }
+
+    private void ShowFullScreenPreview()
+    {
+        if (_picture.Image is null)
+        {
+            return;
+        }
+
+        using var dialog = new Form
+        {
+            Text = "稳序桌面 · 预览",
+            BackColor = Color.FromArgb(28, 24, 22),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.None,
+            WindowState = FormWindowState.Maximized,
+            KeyPreview = true,
+            ControlBox = false,
+            MinimizeBox = false,
+            MaximizeBox = false
+        };
+        var image = new Bitmap(_picture.Image);
+        var picture = new PictureBox
+        {
+            Dock = DockStyle.Fill,
+            BackColor = dialog.BackColor,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Image = image
+        };
+        var exitButton = CreateFullScreenExitButton(dialog.Close);
+        void PositionExitButton()
+        {
+            if (dialog.ClientSize.Width <= 0)
+            {
+                return;
+            }
+
+            exitButton.Location = new Point(
+                Math.Max(16, dialog.ClientSize.Width - exitButton.Width - 24),
+                18);
+        }
+
+        dialog.Resize += (_, _) => PositionExitButton();
+        dialog.Shown += (_, _) => PositionExitButton();
+        dialog.Controls.Add(picture);
+        dialog.Controls.Add(exitButton);
+        exitButton.BringToFront();
+        dialog.KeyDown += (_, eventArgs) =>
+        {
+            if (eventArgs.KeyCode == Keys.Escape)
+            {
+                dialog.Close();
+            }
+        };
+
+        try
+        {
+            dialog.ShowDialog(FindForm());
+        }
+        finally
+        {
+            picture.Image = null;
+            image.Dispose();
+        }
+    }
+
+    internal static Button CreateFullScreenExitButton(Action close)
+    {
+        ArgumentNullException.ThrowIfNull(close);
+
+        var button = new Button
+        {
+            Name = "FullScreenExitButton",
+            AccessibleName = "退出全屏预览",
+            Text = "退出全屏",
+            AutoSize = false,
+            Size = new Size(144, 54),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = SettingsPalette.Wine,
+            ForeColor = SettingsPalette.PaperBright,
+            Font = new Font("Microsoft YaHei", 11f, FontStyle.Bold),
+            Padding = new Padding(12, 5, 12, 5),
+            Cursor = Cursors.Hand,
+            TabStop = false,
+            UseVisualStyleBackColor = false
+        };
+        button.FlatAppearance.BorderColor = SettingsPalette.Gold;
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.MouseOverBackColor = Color.FromArgb(131, 43, 55);
+        button.Click += (_, _) => close();
+        return button;
     }
 
     private static ComboBox CreateComboBox(string accessibleName)

@@ -47,6 +47,9 @@ internal sealed partial class SettingsForm : Form
     private readonly TextBox _quotesBox;
     private readonly TextBox[] _weekdayInputs;
     private readonly Dictionary<string, TextBox> _themeInputs = new(StringComparer.OrdinalIgnoreCase);
+    private TabControl? _settingsTabs;
+    private SplitContainer? _previewWorkspace;
+    private bool _applyingResponsiveLayout;
 
     private string? _pendingBackgroundPath;
     private bool _loadingControls;
@@ -189,7 +192,11 @@ internal sealed partial class SettingsForm : Form
 
         WireLivePreviewEvents();
         LoadDraftIntoControls();
-        Shown += (_, _) => _previewCoordinator.RefreshNow();
+        Shown += (_, _) =>
+        {
+            ApplyResponsiveLayout();
+            _previewCoordinator.RefreshNow();
+        };
     }
 
     private void ConfigureGridBehavior()
@@ -245,6 +252,11 @@ internal sealed partial class SettingsForm : Form
         _statusLabel.Text = "有未应用的更改 · 正在更新预览…";
         _previewPane.ShowRefreshing();
         _previewCoordinator.RequestRefresh();
+    }
+
+    internal void RenderPreviewForSnapshot()
+    {
+        _previewCoordinator.RefreshNow();
     }
 
     protected override void Dispose(bool disposing)

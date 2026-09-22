@@ -40,9 +40,34 @@ internal static class UiStabilityTests
             splitters.Any(splitter =>
                 Descendants(splitter.Panel1).OfType<TabControl>().Any()
                 && Descendants(splitter.Panel2).OfType<SettingsPreviewPane>().Any()));
+        var workspace = splitters.SingleOrDefault(splitter => splitter.Name == "SettingsPreviewWorkspace");
+        if (workspace is not null)
+        {
+            form.ClientSize = new Size(1100, 700);
+            form.PerformLayout();
+            runner.Equal("窄窗口自动上下布局", Orientation.Horizontal, workspace.Orientation);
+
+            form.ClientSize = new Size(1380, 820);
+            form.PerformLayout();
+            runner.Equal("宽窗口恢复左右布局", Orientation.Vertical, workspace.Orientation);
+        }
         runner.Check(
             "实时预览提供场景与分辨率选项",
             Descendants(previewPanes[0]).OfType<ComboBox>().Count() >= 2);
+        runner.Check(
+            "实时预览提供导出与放大查看",
+            buttons.Contains("导出预览") && buttons.Contains("放大查看"));
+        var exitInvoked = false;
+        using (var exitButton = SettingsPreviewPane.CreateFullScreenExitButton(() => exitInvoked = true))
+        {
+            runner.Equal("全屏退出按钮文字", "退出全屏", exitButton.Text);
+            runner.Equal("全屏退出按钮辅助名称", "退出全屏预览", exitButton.AccessibleName);
+            runner.Check(
+                "全屏退出按钮满足触控尺寸",
+                exitButton.Width >= 120 && exitButton.Height >= 48);
+            exitButton.PerformClick();
+        }
+        runner.Check("全屏退出按钮可触发关闭动作", exitInvoked);
         runner.Check("设置中心保留最终确认按钮", buttons.Contains("保存并应用"));
         runner.Check("设置中心保留导入入口", buttons.Contains("导入配置"));
         runner.Check("设置中心保留导出入口", buttons.Contains("导出全部配置"));

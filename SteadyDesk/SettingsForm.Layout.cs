@@ -14,7 +14,7 @@ internal sealed partial class SettingsForm
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
 
         var header = new Panel
         {
@@ -54,7 +54,7 @@ internal sealed partial class SettingsForm
         };
         header.Controls.AddRange([eyebrow, title, subtitle]);
 
-        var tabs = new TabControl
+        var tabs = _settingsTabs = new TabControl
         {
             Name = "SettingsCategories",
             Dock = DockStyle.Fill,
@@ -73,7 +73,7 @@ internal sealed partial class SettingsForm
         tabs.TabPages.Add(BuildContentPage());
         tabs.TabPages.Add(BuildSystemPage());
 
-        var workspace = new SplitContainer
+        var workspace = _previewWorkspace = new SplitContainer
         {
             Name = "SettingsPreviewWorkspace",
             AccessibleName = "设置与固定实时预览",
@@ -81,11 +81,7 @@ internal sealed partial class SettingsForm
             Orientation = Orientation.Vertical,
             BackColor = Paper,
             BorderStyle = BorderStyle.None,
-            SplitterWidth = 8,
-            Size = new Size(1340, 690),
-            SplitterDistance = 820,
-            Panel1MinSize = 560,
-            Panel2MinSize = 350
+            SplitterWidth = 8
         };
         workspace.Panel1.Padding = new Padding(0, 0, 8, 0);
         workspace.Panel2.Padding = new Padding(8, 0, 0, 0);
@@ -124,8 +120,96 @@ internal sealed partial class SettingsForm
         root.Controls.Add(workspace, 0, 1);
         root.Controls.Add(footer, 0, 2);
         Controls.Add(root);
+        ClientSizeChanged += (_, _) => ApplyResponsiveLayout();
+        workspace.SizeChanged += (_, _) => ApplyResponsiveLayout();
+        ApplyResponsiveLayout();
         AcceptButton = apply;
         CancelButton = cancel;
+    }
+
+    private void ApplyResponsiveLayout()
+    {
+        if (_applyingResponsiveLayout || _previewWorkspace is not SplitContainer workspace)
+        {
+            return;
+        }
+
+        var compact = ClientSize.Width < 1220;
+        var targetOrientation = compact ? Orientation.Horizontal : Orientation.Vertical;
+        _applyingResponsiveLayout = true;
+        try
+        {
+            if (workspace.Width <= 0 || workspace.Height <= 0)
+            {
+                workspace.Orientation = targetOrientation;
+                return;
+            }
+
+            var dimensionForSplit = targetOrientation == Orientation.Horizontal
+                ? workspace.ClientSize.Height
+                : workspace.ClientSize.Width;
+            var otherDimension = targetOrientation == Orientation.Horizontal
+                ? workspace.ClientSize.Width
+                : workspace.ClientSize.Height;
+            if (Math.Min(dimensionForSplit, otherDimension) < workspace.SplitterWidth + 50)
+            {
+                workspace.Orientation = targetOrientation;
+                return;
+            }
+
+            workspace.Panel1MinSize = 25;
+            workspace.Panel2MinSize = 25;
+            workspace.Orientation = targetOrientation;
+
+            var available = targetOrientation == Orientation.Horizontal
+                ? workspace.ClientSize.Height
+                : workspace.ClientSize.Width;
+            var requestedPanel1MinSize = compact ? 180 : 560;
+            var requestedPanel2MinSize = compact ? 210 : 350;
+            var availableForPanels = available - workspace.SplitterWidth;
+            var otherAvailableForPanels = otherDimension - workspace.SplitterWidth;
+            var panel1MinSize = requestedPanel1MinSize;
+            var panel2MinSize = requestedPanel2MinSize;
+            if (Math.Min(availableForPanels, otherAvailableForPanels)
+                < panel1MinSize + panel2MinSize)
+            {
+                panel1MinSize = 25;
+                panel2MinSize = 25;
+            }
+
+            workspace.Panel1MinSize = panel1MinSize;
+            workspace.Panel2MinSize = panel2MinSize;
+            if (compact)
+            {
+                workspace.Panel1.Padding = new Padding(0, 0, 0, 6);
+                workspace.Panel2.Padding = new Padding(0, 6, 0, 0);
+            }
+            else
+            {
+                workspace.Panel1.Padding = new Padding(0, 0, 8, 0);
+                workspace.Panel2.Padding = new Padding(8, 0, 0, 0);
+            }
+
+            var maximumDistance = Math.Min(
+                available - workspace.SplitterWidth - workspace.Panel2MinSize,
+                otherDimension - workspace.SplitterWidth - workspace.Panel2MinSize);
+            if (maximumDistance >= workspace.Panel1MinSize)
+            {
+                var preferred = (int)(available * (compact ? 0.36f : 0.61f));
+                var distance = Math.Clamp(
+                    preferred,
+                    workspace.Panel1MinSize,
+                    maximumDistance);
+                if (workspace.SplitterDistance != distance)
+                {
+                    workspace.SplitterDistance = distance;
+                }
+            }
+        }
+        finally
+        {
+            _applyingResponsiveLayout = false;
+        }
     }
 
     private TabPage BuildOverviewPage()
