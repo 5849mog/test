@@ -19,7 +19,7 @@
 
 ## 项目结构
 
-- `SteadyDesk/Configuration.cs`：配置模型、默认数据与版本迁移
+- `SteadyDesk/Configuration.cs`：配置模型、默认数据与本产品配置版本迁移
 - `SteadyDesk/ScheduleEngine.cs`：课表标准化、解析、优先级和验证
 - `SteadyDesk/WallpaperRenderer.cs`：纯配置驱动的壁纸绘制
 - `SteadyDesk/SettingsForm.cs`：设置中心入口与生命周期协调
@@ -61,13 +61,13 @@ dotnet run --project SteadyDesk.ScheduleChecks/SteadyDesk.ScheduleChecks.csproj 
 dotnet publish SteadyDesk/SteadyDesk.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
 ```
 
-程序会在首次启动时创建：
+程序会在首次启动时创建独立的数据目录：
 
 ```text
 %LOCALAPPDATA%/稳序桌面/
 ```
 
-其中保存配置、当前壁纸、预览图、默认底图和原壁纸备份。
+其中保存配置、当前壁纸、预览图、默认底图和原壁纸备份。首次运行使用稳序桌面的默认配置，不读取“郑老师中考倒计时”的历史设置；两款程序的数据与后续更新生命周期相互独立。
 
 ## 课表判定规则
 
@@ -75,6 +75,6 @@ dotnet publish SteadyDesk/SteadyDesk.csproj -c Release -r win-x64 --self-contain
 
 星期五等特殊作息不需要复制整张课表：双击对应课程格，只覆盖当天这一节的起止时间即可。临时停课、补课或调课则在“特殊日期”中配置。
 
-## 兼容说明
+## 配置版本说明
 
-Schema v3 及更早课表会在首次加载时迁移到 v4；迁移前的 JSON 会以带版本号和时间戳的文件名保留。旧本地目录名称只用于读取历史设置，不再作为软件显示名称。
+Schema v3 及更早的稳序桌面配置会在首次加载时迁移到 v4；迁移前的 JSON 会以带版本号和时间戳的文件名保留。这是稳序桌面自身的配置格式升级，不会导入其他产品的设置。

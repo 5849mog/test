@@ -278,7 +278,9 @@ internal static class ConfigStore
 
         if (!File.Exists(AppStorage.ConfigPath))
         {
-            config = LoadLegacyOrDefault();
+            // Steady Desk is a separate product. A first run always starts from
+            // this product's defaults; do not inspect another app's data folder.
+            config = AppConfig.CreateDefault();
             shouldSave = true;
         }
         else
@@ -295,7 +297,7 @@ internal static class ConfigStore
             catch (JsonException)
             {
                 LastRecoveryPath = BackupCorruptConfig();
-                config = LoadLegacyOrDefault();
+                config = AppConfig.CreateDefault();
                 shouldSave = true;
             }
         }
@@ -385,50 +387,4 @@ internal static class ConfigStore
         }
     }
 
-    private static AppConfig LoadLegacyOrDefault()
-    {
-        var config = AppConfig.CreateDefault();
-        var legacyPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "郑老师中考倒计时",
-            "settings.json");
-
-        if (!File.Exists(legacyPath))
-        {
-            return config;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(File.ReadAllText(legacyPath));
-            var root = document.RootElement;
-            if (root.TryGetProperty("BackgroundPath", out var background)
-                && background.ValueKind == JsonValueKind.String)
-            {
-                var path = background.GetString();
-                if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
-                {
-                    config.Wallpaper.BackgroundPath = path;
-                }
-            }
-
-            if (root.TryGetProperty("OriginalWallpaperPath", out var original)
-                && original.ValueKind == JsonValueKind.String)
-            {
-                config.Wallpaper.OriginalWallpaperPath = original.GetString();
-            }
-
-            if (root.TryGetProperty("ScheduleXPercent", out var x)
-                && x.TryGetSingle(out var xPercent))
-            {
-                config.Wallpaper.ScheduleXPercent = xPercent;
-            }
-        }
-        catch
-        {
-            return AppConfig.CreateDefault();
-        }
-
-        return config;
-    }
 }
