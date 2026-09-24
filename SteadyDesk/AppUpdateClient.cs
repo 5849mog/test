@@ -300,43 +300,46 @@ internal sealed class AppUpdateClient
             }
 
             await using var input = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
-            await using var output = new FileStream(
+            var total = offset;
+            progress?.Report(total);
+            await using (var output = new FileStream(
                 partialPath,
                 offset == 0 ? FileMode.Create : FileMode.Append,
                 FileAccess.Write,
                 FileShare.None,
                 64 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
-            var total = offset;
-            progress?.Report(total);
-            try
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
-                while (true)
+                var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
+                try
                 {
-                    var read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), timeout.Token).ConfigureAwait(false);
-                    if (read == 0)
+                    while (true)
                     {
-                        break;
-                    }
+                        var read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), timeout.Token).ConfigureAwait(false);
+                        if (read == 0)
+                        {
+                            break;
+                        }
 
-                    total += read;
-                    if (total > manifest.PackageSizeBytes
-                        || total > UpdateManifestVerifier.MaximumPackageBytes)
-                    {
-                        throw new InvalidDataException("下载文件超过清单声明大小。");
-                    }
+                        total += read;
+                        if (total > manifest.PackageSizeBytes
+                            || total > UpdateManifestVerifier.MaximumPackageBytes)
+                        {
+                            throw new InvalidDataException("下载文件超过清单声明大小。");
+                        }
 
-                    await output.WriteAsync(buffer.AsMemory(0, read), timeout.Token).ConfigureAwait(false);
-                    progress?.Report(total);
+                        await output.WriteAsync(buffer.AsMemory(0, read), timeout.Token).ConfigureAwait(false);
+                        progress?.Report(total);
+                    }
                 }
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer);
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                }
+
+                await output.FlushAsync(timeout.Token).ConfigureAwait(false);
             }
 
-            await output.FlushAsync(timeout.Token).ConfigureAwait(false);
             if (total != manifest.PackageSizeBytes)
             {
                 throw new EndOfStreamException("下载暂未完成；已保留已下载部分，下次检查时会继续下载。");
