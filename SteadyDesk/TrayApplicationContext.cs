@@ -7,6 +7,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly NotifyIcon _notifyIcon;
     private readonly System.Windows.Forms.Timer _timer;
+    private readonly ToolStripMenuItem _checkForUpdatesItem;
+    private readonly AppUpdateClient _updateClient = new();
     private AppConfig _config;
     private DateTime _lastRefreshDay;
     private DateTime _lastRenderedMinute;
@@ -39,6 +41,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var menu = new ContextMenuStrip();
         menu.Items.Add("打开控制中心", null, (_, _) => OpenSettings());
         menu.Items.Add("立即刷新壁纸", null, (_, _) => RefreshWallpaper(true));
+        _checkForUpdatesItem = new ToolStripMenuItem("检查更新")
+        {
+            Visible = AppUpdateClient.IsTrustConfigured
+        };
+        _checkForUpdatesItem.Click += async (_, _) => await CheckForUpdatesAsync(true);
+        menu.Items.Add(_checkForUpdatesItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("退出并保留壁纸", null, (_, _) => ExitKeepingWallpaper());
         menu.Items.Add("停用并恢复原壁纸", null, (_, _) => DisableAndRestore());
@@ -61,6 +69,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         RefreshWallpaper(false);
+        if (_checkForUpdatesItem.Visible)
+        {
+            _ = CheckForUpdatesAsync(false);
+        }
 
         if (openSettings)
         {
@@ -116,6 +128,124 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             MessageBox.Show(exception.Message, "设置保存失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    private async Task CheckForUpdatesAsync(bool showCurrentVersionMessage)
+    {
+        if (!_checkForUpdatesItem.Visible || !_checkForUpdatesItem.Enabled)
+        {
+            return;
+        }
+
+        _checkForUpdatesItem.Enabled = false;
+        _checkForUpdatesItem.Text = "正在检查更新…";
+        try
+        {
+            var result = await _updateClient.CheckAsync();
+            if (!result.IsUpdateAvailable)
+            {
+                if (showCurrentVersionMessage)
+                {
+                    MessageBox.Show(
+                        "当前已是最新版本（" + result.CurrentVersion + "）。",
+                        "稳序桌面更新",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+
+                return;
+            }
+
+            var sizeMiB = result.Manifest.PackageSizeBytes / 1024d / 1024d;
+            var answer = MessageBox.Show(
+                "发现新版本 " + result.AvailableVersion + "，安装包约 " + sizeMiB.ToString("F1") + " MiB。\n\n" +
+                "现在下载并安装吗？安装时稳序桌面会自动关闭并重新打开。",
+                "稳序桌面更新",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Information);
+            if (answer != DialogResult.Yes)
+            {
+                return;
+            }
+
+            await DownloadAndApplyUpdateAsync(result.Manifest);
+        }
+        catch (OperationCanceledException)
+        {
+            if (showCurrentVersionMessage)
+            {
+                MessageBox.Show("检查更新超时，请稍后重试。", "稳序桌面更新", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+        catch (Exception exception)
+        {
+            if (showCurrentVersionMessage)
+            {
+                MessageBox.Show(
+                    "检查或安装更新失败。程序仍会按当前版本运行。\n\n" + exception.Message,
+                    "稳序桌面更新",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+        }
+        finally
+        {
+            _checkForUpdatesItem.Enabled = true;
+            _checkForUpdatesItem.Text = "检查更新";
+        }
+    }
+
+    private async Task DownloadAndApplyUpdateAsync(UpdateManifest manifest)
+    {
+        var helperPath = Path.Combine(AppContext.BaseDirectory, "SteadyDesk.UpdateHelper.exe");
+        var appPath = Environment.ProcessPath;
+        if (!File.Exists(helperPath)
+            || string.IsNullOrWhiteSpace(appPath)
+            || !File.Exists(appPath)
+            || !PathsEqual(AppContext.BaseDirectory, AppStorage.InstallDirectory))
+        {
+            throw new InvalidOperationException(
+                "当前程序尚未安装到可更新目录，或缺少更新组件。请先把完整安装包解压到：\n\n" +
+                AppStorage.InstallDirectory + "\n\n然后从该目录启动稳序桌面。");
+        }
+
+        _checkForUpdatesItem.Text = "正在下载更新…";
+        _notifyIcon.ShowBalloonTip(2500, "正在下载更新", "下载完成并校验后才会安装。", ToolTipIcon.Info);
+        var progress = new Progress<long>(bytes =>
+        {
+            if (_checkForUpdatesItem.Visible)
+            {
+                _checkForUpdatesItem.Text = "正在下载更新（" + (bytes / 1024 / 1024) + " MiB）…";
+            }
+        });
+        var packagePath = await _updateClient.DownloadPackageAsync(manifest, progress);
+
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = helperPath,
+            WorkingDirectory = AppContext.BaseDirectory,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("--apply");
+        startInfo.ArgumentList.Add(packagePath);
+        startInfo.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        startInfo.ArgumentList.Add(appPath);
+        startInfo.ArgumentList.Add(manifest.Sha256);
+
+        if (System.Diagnostics.Process.Start(startInfo) is null)
+        {
+            throw new InvalidOperationException("无法启动更新组件。");
+        }
+
+        ExitKeepingWallpaper();
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        return string.Equals(
+            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private void RefreshWallpaper(bool showConfirmation)

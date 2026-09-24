@@ -52,14 +52,24 @@ jobs:
           --self-contained true
           /p:PublishSingleFile=true
           /p:IncludeNativeLibrariesForSelfExtract=true
-          -o dist
+          -o dist/app
+
+      - name: Publish update helper
+        run: >
+          dotnet publish SteadyDesk.UpdateHelper/SteadyDesk.UpdateHelper.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          /p:PublishSingleFile=true
+          /p:IncludeNativeLibrariesForSelfExtract=true
+          -o dist/helper
 
       - name: Smoke-test published executable
         shell: pwsh
         run: |
           $profileRoot = Join-Path $env:RUNNER_TEMP "steady-desk-smoke-profile"
           $preview = Join-Path $env:RUNNER_TEMP "steady-desk-published-smoke.jpg"
-          $exe = Join-Path $PWD "dist/稳序桌面.exe"
+          $exe = Join-Path $PWD "dist/app/稳序桌面.exe"
           New-Item -ItemType Directory -Force -Path $profileRoot | Out-Null
           $env:STEADY_DESK_DATA_DIR = $profileRoot
 
@@ -99,8 +109,64 @@ jobs:
             throw "Published preview is not a JPEG."
           }
 
+      - name: Create bootstrap and update packages
+        shell: pwsh
+        run: |
+          $dist = Join-Path $PWD "dist"
+          $bootstrap = Join-Path $env:RUNNER_TEMP "steady-desk-bootstrap"
+          $update = Join-Path $env:RUNNER_TEMP "steady-desk-update"
+          New-Item -ItemType Directory -Force -Path $bootstrap | Out-Null
+          New-Item -ItemType Directory -Force -Path $update | Out-Null
+
+          Copy-Item (Join-Path $dist "app/稳序桌面.exe") $bootstrap
+          Copy-Item (Join-Path $dist "helper/SteadyDesk.UpdateHelper.exe") $bootstrap
+          Copy-Item (Join-Path $dist "app/稳序桌面.exe") $update
+
+          $bootstrapZip = Join-Path $dist "steady-desk-win-x64.zip"
+          $updateZip = Join-Path $dist "steady-desk-update-win-x64.zip"
+          Compress-Archive -Path (Join-Path $bootstrap "*") -DestinationPath $bootstrapZip -CompressionLevel Optimal
+          Compress-Archive -Path (Join-Path $update "*") -DestinationPath $updateZip -CompressionLevel Optimal
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $bootstrapArchive = [System.IO.Compression.ZipFile]::OpenRead($bootstrapZip)
+          try {
+            $bootstrapNames = @($bootstrapArchive.Entries | ForEach-Object FullName | Sort-Object)
+            if ($bootstrapNames.Count -ne 2 -or $bootstrapNames[0] -ne "SteadyDesk.UpdateHelper.exe" -or $bootstrapNames[1] -ne "稳序桌面.exe") {
+              throw "Bootstrap ZIP must contain exactly the app and update helper."
+            }
+          }
+          finally {
+            $bootstrapArchive.Dispose()
+          }
+
+          $updateArchive = [System.IO.Compression.ZipFile]::OpenRead($updateZip)
+          try {
+            if ($updateArchive.Entries.Count -ne 1 -or $updateArchive.Entries[0].FullName -ne "稳序桌面.exe") {
+              throw "Update ZIP must contain exactly the app executable."
+            }
+          }
+          finally {
+            $updateArchive.Dispose()
+          }
+
+          if ((Get-Item (Join-Path $dist "helper/SteadyDesk.UpdateHelper.exe")).Length -lt 1MB) {
+            throw "Published update helper is unexpectedly small."
+          }
+
       - name: Upload executable artifact
         uses: actions/upload-artifact@v4
         with:
           name: steady-desk-win-x64
-          path: dist/稳序桌面.exe
+          path: dist/app/稳序桌面.exe
+
+      - name: Upload bootstrap ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: steady-desk-bootstrap-win-x64
+          path: dist/steady-desk-win-x64.zip
+
+      - name: Upload update ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: steady-desk-update-win-x64
+          path: dist/steady-desk-update-win-x64.zip

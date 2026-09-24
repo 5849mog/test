@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>SteadyDesk</RootNamespace>
     <AssemblyName>稳序桌面</AssemblyName>
+    <Version>1.2.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -19,6 +20,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="SteadyDesk.ScheduleChecks" />
+    <AssemblyMetadata Include="SteadyDesk.UpdatePublicKeyBase64" Value="$(UpdatePublicKeyBase64)" />
   </ItemGroup>
 
   <ItemGroup>

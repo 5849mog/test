@@ -1,0 +1,199 @@
+name: Release SteadyDesk
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Published release tag to build, for example v1.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag_name }}
+      UPDATE_PUBLIC_KEY_BASE64: ${{ vars.UPDATE_PUBLIC_KEY_BASE64 }}
+      STEADYDESK_UPDATE_PRIVATE_KEY_PEM: ${{ secrets.STEADYDESK_UPDATE_PRIVATE_KEY_PEM }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout released source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag_name }}
+
+      - name: Validate release settings
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v(?<version>\d+\.\d+\.\d+)$') {
+            throw "Release tag must look like v1.2.0."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:UPDATE_PUBLIC_KEY_BASE64)) {
+            throw "Repository variable UPDATE_PUBLIC_KEY_BASE64 is missing."
+          }
+          $publicPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:UPDATE_PUBLIC_KEY_BASE64))
+          $rsa = [System.Security.Cryptography.RSA]::Create()
+          try {
+            $rsa.ImportFromPem($publicPem)
+            if ($rsa.KeySize -lt 2048) {
+              throw "Update public key must be at least 2048 bits."
+            }
+          }
+          finally {
+            $rsa.Dispose()
+          }
+          if ([string]::IsNullOrWhiteSpace($env:STEADYDESK_UPDATE_PRIVATE_KEY_PEM)) {
+            throw "GitHub Secret STEADYDESK_UPDATE_PRIVATE_KEY_PEM is missing."
+          }
+          "STEADYDESK_VERSION=$($Matches.version)" >> $env:GITHUB_ENV
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Run final stability sweep
+        run: dotnet run --project SteadyDesk.ScheduleChecks/SteadyDesk.ScheduleChecks.csproj -c Release
+
+      - name: Publish application and update helper
+        shell: pwsh
+        run: |
+          $version = $env:STEADYDESK_VERSION
+          dotnet publish SteadyDesk/SteadyDesk.csproj `
+            -c Release -r win-x64 --self-contained true `
+            /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true `
+            "/p:Version=$version" "/p:UpdatePublicKeyBase64=$env:UPDATE_PUBLIC_KEY_BASE64" `
+            -o dist/app
+          if ($LASTEXITCODE -ne 0) { throw "Application publish failed." }
+
+          dotnet publish SteadyDesk.UpdateHelper/SteadyDesk.UpdateHelper.csproj `
+            -c Release -r win-x64 --self-contained true `
+            /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true `
+            "/p:Version=$version" -o dist/helper
+          if ($LASTEXITCODE -ne 0) { throw "Update helper publish failed." }
+
+      - name: Create signed release packages
+        shell: pwsh
+        run: |
+          $releaseDir = Join-Path $PWD "dist/release"
+          $bootstrapDir = Join-Path $env:RUNNER_TEMP "steady-desk-bootstrap"
+          $updateDir = Join-Path $env:RUNNER_TEMP "steady-desk-update"
+          New-Item -ItemType Directory -Force -Path $releaseDir, $bootstrapDir, $updateDir | Out-Null
+
+          $appPath = Join-Path $PWD "dist/app/稳序桌面.exe"
+          $helperPath = Join-Path $PWD "dist/helper/SteadyDesk.UpdateHelper.exe"
+          if (-not (Test-Path $appPath) -or -not (Test-Path $helperPath)) {
+            throw "Published application or update helper is missing."
+          }
+
+          Copy-Item $appPath $bootstrapDir
+          Copy-Item $helperPath $bootstrapDir
+          Copy-Item $appPath $updateDir
+
+          $bootstrapZip = Join-Path $releaseDir "steady-desk-win-x64.zip"
+          $updateZip = Join-Path $releaseDir "steady-desk-update-win-x64.zip"
+          Compress-Archive -Path (Join-Path $bootstrapDir "*") -DestinationPath $bootstrapZip -CompressionLevel Optimal
+          Compress-Archive -Path (Join-Path $updateDir "*") -DestinationPath $updateZip -CompressionLevel Optimal
+
+          $packageUrl = "https://my-1253786342.cos.ap-shanghai.myqcloud.com/releases/v$env:STEADYDESK_VERSION/steady-desk-update-win-x64.zip"
+          $manifestPath = Join-Path $releaseDir "latest.json"
+          ./scripts/Sign-UpdateManifest.ps1 `
+            -Version $env:STEADYDESK_VERSION `
+            -PackagePath $updateZip `
+            -PackageUrl $packageUrl `
+            -ExpectedPublicKeyBase64 $env:UPDATE_PUBLIC_KEY_BASE64 `
+            -OutputPath $manifestPath
+
+      - name: Attach packages and signed manifest to GitHub Release
+        shell: pwsh
+        run: |
+          gh release upload $env:RELEASE_TAG `
+            dist/release/steady-desk-win-x64.zip `
+            dist/release/steady-desk-update-win-x64.zip `
+            dist/release/latest.json `
+            --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Uploading release assets failed." }
+
+      - name: Upload release files for COS publishing
+        uses: actions/upload-artifact@v4
+        with:
+          name: steady-desk-release-files
+          path: dist/release
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-cos:
+    needs: build-release
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+      TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+      COS_BUCKET: ${{ vars.COS_BUCKET }}
+
+    steps:
+      - name: Check COS publishing credentials
+        id: cos-ready
+        shell: pwsh
+        run: |
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace($env:TENCENT_SECRET_ID)) { $missing += "TENCENT_SECRET_ID" }
+          if ([string]::IsNullOrWhiteSpace($env:TENCENT_SECRET_KEY)) { $missing += "TENCENT_SECRET_KEY" }
+          if ([string]::IsNullOrWhiteSpace($env:COS_BUCKET)) { $missing += "COS_BUCKET" }
+          if ($missing.Count -gt 0) {
+            Write-Host "COS publishing skipped; configure the listed GitHub secrets or variable to enable it: $($missing -join ', ')"
+            "ready=false" >> $env:GITHUB_OUTPUT
+          }
+          else {
+            "ready=true" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Download signed release files
+        if: steps.cos-ready.outputs.ready == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: steady-desk-release-files
+          path: dist/release
+
+      - name: Setup Python for COSCMD
+        if: steps.cos-ready.outputs.ready == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Tencent COSCMD
+        if: steps.cos-ready.outputs.ready == 'true'
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check coscmd
+
+      - name: Upload versioned packages, then stable manifest
+        if: steps.cos-ready.outputs.ready == 'true'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag_name }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v(?<version>\d+\.\d+\.\d+)$') {
+            throw "Release tag must look like v1.2.0."
+          }
+          $version = $Matches.version
+          if ($env:COS_BUCKET -ne "my-1253786342") {
+            throw "COS_BUCKET must match the bucket used by the embedded update URL (my-1253786342)."
+          }
+          coscmd config -a $env:TENCENT_SECRET_ID -s $env:TENCENT_SECRET_KEY -b $env:COS_BUCKET -r ap-shanghai
+          if ($LASTEXITCODE -ne 0) { throw "COSCMD configuration failed." }
+
+          coscmd upload dist/release/steady-desk-win-x64.zip "releases/v$version/steady-desk-win-x64.zip"
+          if ($LASTEXITCODE -ne 0) { throw "Uploading the bootstrap package failed." }
+
+          coscmd upload dist/release/steady-desk-update-win-x64.zip "releases/v$version/steady-desk-update-win-x64.zip"
+          if ($LASTEXITCODE -ne 0) { throw "Uploading the update package failed." }
+
+          coscmd upload dist/release/latest.json releases/stable/latest.json
+          if ($LASTEXITCODE -ne 0) { throw "Uploading the stable update manifest failed." }
