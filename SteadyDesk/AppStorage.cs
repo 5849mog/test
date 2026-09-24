@@ -20,6 +20,11 @@ internal static class AppStorage
     public static string PreviewWallpaperPath => Path.Combine(RootDirectory, "预览壁纸.jpg");
     public static string OriginalWallpaperPath => Path.Combine(RootDirectory, "原壁纸.png");
     public static string CustomBackgroundPath => Path.Combine(RootDirectory, "自定义背景.png");
+    public static string UpdatesDirectory => Path.Combine(RootDirectory, "updates");
+    public static string InstallDirectory => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Programs",
+        "SteadyDesk");
 
     private static string ResolveRootDirectory()
     {

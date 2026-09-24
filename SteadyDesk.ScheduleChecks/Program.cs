@@ -19,6 +19,7 @@ internal static class Program
         RenderingStabilityTests.Run(runner);
         UiStabilityTests.Run(runner);
         PreviewStabilityTests.Run(runner);
+        UpdateStabilityTests.Run(runner);
 
         return runner.Complete();
     }
