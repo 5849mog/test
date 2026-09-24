@@ -14,7 +14,9 @@ internal static class UpdateStabilityTests
         runner.Suite("更新版本三段号比较", () => VerifyVersionComparison(runner));
         runner.Suite("更新清单签名与字段绑定", () => VerifySignatureAndPayload(runner));
         runner.Suite("更新来源与异常清单约束", () => VerifyManifestConstraints(runner));
-        runner.Suite("更新包下载校验与失败清理", () => VerifyPackageDownload(runner).GetAwaiter().GetResult());
+        runner.Suite(
+            "更新包下载校验与失败清理",
+            () => Task.Run(() => VerifyPackageDownload(runner)).GetAwaiter().GetResult());
     }
 
     private static void VerifyVersionComparison(StabilityTestRunner runner)

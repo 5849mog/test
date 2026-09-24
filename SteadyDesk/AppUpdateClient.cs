@@ -167,7 +167,7 @@ internal sealed class AppUpdateClient
         using var response = await _httpClient.GetAsync(
             ManifestUri,
             HttpCompletionOption.ResponseHeadersRead,
-            timeout.Token);
+            timeout.Token).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         if (response.Content.Headers.ContentLength is > 32 * 1024)
@@ -175,14 +175,14 @@ internal sealed class AppUpdateClient
             throw new InvalidDataException("更新清单超过允许大小。");
         }
 
-        await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+        await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
         using var content = new MemoryStream();
         var buffer = ArrayPool<byte>.Shared.Rent(4096);
         try
         {
             while (true)
             {
-                var read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), timeout.Token);
+                var read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), timeout.Token).ConfigureAwait(false);
                 if (read == 0)
                 {
                     break;
@@ -275,7 +275,7 @@ internal sealed class AppUpdateClient
             using var response = await _httpClient.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
-                timeout.Token);
+                timeout.Token).ConfigureAwait(false);
 
             if (response.StatusCode == HttpStatusCode.OK && offset > 0)
             {
@@ -299,7 +299,7 @@ internal sealed class AppUpdateClient
                 throw new InvalidDataException("下载文件大小与更新清单不符。");
             }
 
-            await using var input = await response.Content.ReadAsStreamAsync(timeout.Token);
+            await using var input = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
             await using var output = new FileStream(
                 partialPath,
                 offset == 0 ? FileMode.Create : FileMode.Append,
@@ -314,7 +314,7 @@ internal sealed class AppUpdateClient
             {
                 while (true)
                 {
-                    var read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), timeout.Token);
+                    var read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), timeout.Token).ConfigureAwait(false);
                     if (read == 0)
                     {
                         break;
@@ -327,7 +327,7 @@ internal sealed class AppUpdateClient
                         throw new InvalidDataException("下载文件超过清单声明大小。");
                     }
 
-                    await output.WriteAsync(buffer.AsMemory(0, read), timeout.Token);
+                    await output.WriteAsync(buffer.AsMemory(0, read), timeout.Token).ConfigureAwait(false);
                     progress?.Report(total);
                 }
             }
@@ -336,7 +336,7 @@ internal sealed class AppUpdateClient
                 ArrayPool<byte>.Shared.Return(buffer);
             }
 
-            await output.FlushAsync(timeout.Token);
+            await output.FlushAsync(timeout.Token).ConfigureAwait(false);
             if (total != manifest.PackageSizeBytes)
             {
                 throw new EndOfStreamException("下载暂未完成；已保留已下载部分，下次检查时会继续下载。");
